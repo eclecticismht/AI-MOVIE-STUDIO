@@ -16,7 +16,7 @@ function comfyGraph(job) { const frames=h3FrameCount(job.duration), prompt=job.p
   "2":{class_type:"CLIPLoader",inputs:{clip_name:"qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",type:"minimax",device:"default"}},
   "3":{class_type:"VAELoader",inputs:{vae_name:"minimax_h3_video_vae_fp16.safetensors"}},
   "4":{class_type:"VAELoader",inputs:{vae_name:"minimax_h3_audio_vae_fp32.safetensors"}},
-  "5":{class_type:"MiniMaxH3Director",inputs:{model:["1",0],video_vae:["3",0],audio_vae:["4",0],clip:["2",0],task_type:"t2v — 文生视频(Text to Video)",global_prompt:prompt,cfg:1,seed:Math.floor(Math.random()*2147483647),frame_rate:24,width:864,height:480,ref_max_size:864,total_frames:frames,timeline_data:"",steps:25,sampler:"res_multistep",scheduler:"simple",shift_video:12,shift_audio:3,clear_vram_between_segments:true,export_source_images:false}},
+  "5":{class_type:"MiniMaxH3Director",inputs:{model:["1",0],video_vae:["3",0],audio_vae:["4",0],clip:["2",0],task_type:"t2v — 文生视频(Text to Video)",global_prompt:prompt,bd_grp_sample:"采样设置",cfg:1,seed:Math.floor(Math.random()*2147483647),frame_rate:24,width:864,height:480,ref_max_size:864,total_frames:frames,timeline_data:"",bd_grp_advanced:"高级采样 Advanced",steps:25,sampler:"res_multistep",scheduler:"simple",shift_video:12,shift_audio:3,bd_grp_perf:"性能 Performance",clear_vram_between_segments:true,export_source_images:false}},
   "6":{class_type:"CreateVideo",inputs:{images:["5",0],audio:["5",1],fps:["5",2],bit_depth:8}},
   "7":{class_type:"SaveVideo",inputs:{video:["6",0],filename_prefix:prefix,format:"auto",codec:"auto"}}
 }; }
