@@ -6,6 +6,10 @@ For browser automation and full interaction testing, double-click START_LOCAL_SE
 then open http://127.0.0.1:4173. This is an offline, package-free local server and
 does not send project data to the Internet.
 
+To connect the Generation Queue to NODE_01, also double-click START_LOCAL_CONNECTOR.bat.
+The connector listens only on http://127.0.0.1:8080 and accepts local H3 jobs. It keeps
+jobs in its local queue until a real Minimax H3 worker and credentials are configured.
+
 The application retains its v0.1.7 localStorage key (`aimovie_data`) and adds
 project bible, scene-script, asset, storyboard, generation queue, review,
 MASTER/4K, audio, Premiere hand-off, Local Connector, and 300/90 tracking.
