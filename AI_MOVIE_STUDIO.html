@@ -141,7 +141,7 @@ function editById(id){editing=D.shots.findIndex(x=>x.id===id);editor.style.displ
 function savePrompt(){D.shots[editing].prompt=prompt.value;persist()}
 function queueById(id){let i=D.shots.findIndex(x=>x.id===id);D.shots[i].status="等待 Worker";D.jobs.push({shot:D.shots[i].id,projectId:D.shots[i].projectId,status:"等待本地 H3 Connector"});persist();go("gen")}
 function addShot(){let n=projectShots().length+1;D.shots.push({id:"S"+String(n).padStart(2,"0")+"_SH001_"+String(Date.now()).slice(-4),projectId:D.activeProjectId,desc:"新镜头",char:"—",scene:"待定",dur:5,status:"待制作",prompt:""});persist()}
-function openCockpit(id){D.activeProjectId=id;persist();render();go("cockpit")}
+function openCockpit(id){D.activeProjectId=id;localStorage.setItem("aimovie_data",JSON.stringify(D));renderAll();document.querySelectorAll(".page").forEach(x=>x.classList.remove("on"));document.getElementById("cockpit").classList.add("on")}
 function cockpitJump(id){document.getElementById(id)?.scrollIntoView({behavior:"smooth"})}
 function renderCockpit(){
  let p=activeProject(),ss=projectShots(),finishedSec=ss.filter(x=>x.status==="完成").reduce((a,b)=>a+Number(b.dur||0),0),finished=finishedSec/60,target=Number(p.target||1),pct=Math.min(100,finished/target*100);
