@@ -24,7 +24,7 @@ async function submitToComfy(job) { const response=await fetch(comfyUrl+"/prompt
 async function syncComfyStatus(job) { if(!job.comfyPromptId) return job; const response=await fetch(comfyUrl+"/history/"+encodeURIComponent(job.comfyPromptId)); const history=await response.json(),record=history[job.comfyPromptId]; if(!record) return job; const output=Object.values(record.outputs||{}).flatMap(x=>x.images||[])[0]; job.comfyStatus=record.status?.status_str||"unknown"; if(record.status?.completed&&output){job.connectorStatus="ComfyUI H3 已完成";job.output=output;job.videoUrl=comfyUrl+"/view?filename="+encodeURIComponent(output.filename)+"&subfolder="+encodeURIComponent(output.subfolder||"")+"&type="+encodeURIComponent(output.type||"output");} jobs.set(job.id,job);persistQueue();return job; }
 
 function send(response, status, data) {
-  response.writeHead(status, {"Content-Type":"application/json; charset=utf-8", "Access-Control-Allow-Origin":"http://127.0.0.1:4173", "Access-Control-Allow-Methods":"GET,POST,OPTIONS"});
+  response.writeHead(status, {"Content-Type":"application/json; charset=utf-8", "Access-Control-Allow-Origin":"http://127.0.0.1:4173", "Access-Control-Allow-Methods":"GET,POST,OPTIONS", "Access-Control-Allow-Headers":"Content-Type"});
   response.end(JSON.stringify(data));
 }
 function body(request) { return new Promise((resolve, reject) => { let raw=""; request.on("data", chunk => raw += chunk); request.on("end", () => { try { resolve(JSON.parse(raw || "{}")); } catch (error) { reject(error); } }); }); }
