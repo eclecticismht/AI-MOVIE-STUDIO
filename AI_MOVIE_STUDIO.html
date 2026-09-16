@@ -1,0 +1,216 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI MOVIE STUDIO Web v0.1.7</title><style>
+*{box-sizing:border-box}body{margin:0;background:#090c11;color:#edf2f7;font:14px Arial,"Microsoft YaHei";display:grid;grid-template-columns:230px 1fr;min-height:100vh}aside{background:#10141b;padding:24px 16px;border-right:1px solid #242b36}.brand{font-size:20px;font-weight:800}.muted{color:#8e99a8}nav{margin-top:22px}nav button{width:100%;display:block;background:none;border:0;color:#bec6d1;text-align:left;padding:11px;border-radius:8px;cursor:pointer}nav button:hover{background:#202631}main{padding:30px;max-width:1500px}.page{display:none}.on{display:block}h1{font-size:29px;margin:0 0 5px}.card{background:#151a23;border:1px solid #29313d;border-radius:12px;padding:17px;margin:13px 0}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:11px}.k{background:#151a23;border:1px solid #29313d;border-radius:10px;padding:14px}.k b{display:block;font-size:21px;margin-top:5px}table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #29313d;text-align:left}th{color:#8e99a8}.btn{padding:7px 10px;border:1px solid #35404e;background:#222a35;color:white;border-radius:7px;cursor:pointer}.gold{background:#e8b15d;color:#17120b;border:0;font-weight:bold}textarea{width:100%;min-height:100px;background:#0d1117;color:white;border:1px solid #333d4a;border-radius:8px;padding:10px}.ok{color:#63d99a}.warn{color:#e8b15d}
+
+.wizardSteps{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:16px 0}.step{padding:12px 8px;border:1px solid #34404d;border-radius:10px;text-align:center;color:#8e99a8}.step.active{border-color:#4eb5ff;color:#fff;background:#11283a}.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field label{display:block;color:#9da8b7;margin-bottom:5px}.field input,.field select,.field textarea{width:100%;padding:10px;background:#0d1117;color:#fff;border:1px solid #34404d;border-radius:8px}.choicegrid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.choice{padding:13px;border:1px solid #34404d;border-radius:9px;cursor:pointer}.choice.sel{border-color:#4eb5ff;background:#102a3c}.wizardLayout{display:grid;grid-template-columns:minmax(0,3fr) minmax(280px,1fr);gap:14px}.previewCard{position:sticky;top:20px}.bigstat{font-size:25px;font-weight:800}.risk{padding:8px 0;border-bottom:1px solid #29313d}.hidden{display:none}
+
+.studioHead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}.studioProjects{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.projectCard{background:#151a23;border:1px solid #29313d;border-radius:12px;padding:15px;cursor:pointer}.projectCard:hover{border-color:#4eb5ff}.projectCard.active{border-color:#e8b15d}.bar{height:7px;background:#29313d;border-radius:8px;overflow:hidden}.bar i{display:block;height:100%;background:#4eb5ff}.minirow{display:flex;justify-content:space-between;margin:8px 0}.studioCols{display:grid;grid-template-columns:2fr 1fr;gap:12px}.queueItem{padding:10px 0;border-bottom:1px solid #29313d}.statusDot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#63d99a;margin-right:6px}@media(max-width:1100px){.studioProjects{grid-template-columns:1fr 1fr}.studioCols{grid-template-columns:1fr}}
+
+.cockpitTabs{display:flex;gap:7px;flex-wrap:wrap;margin:14px 0}.cockpitTabs button{padding:8px 11px;background:#151a23;color:#bec6d1;border:1px solid #303946;border-radius:8px;cursor:pointer}.cockpitHero{display:grid;grid-template-columns:2fr 1fr;gap:12px}.phase{padding:10px;border-left:3px solid #4eb5ff;background:#111721;margin:7px 0}.todo{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid #29313d}.cockpitGrid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}.status{padding:3px 7px;border:1px solid #35404e;border-radius:99px;font-size:12px}.small{font-size:12px}.empty{padding:20px;color:#8e99a8;text-align:center}.assetCard{position:relative}.assetCard h3{margin:0 0 8px}.assetMeta{color:#8e99a8;line-height:1.7}.progressLine{margin:8px 0}.progressLine label{display:flex;justify-content:space-between;font-size:12px;color:#9da8b7;margin-bottom:4px}@media(max-width:800px){body{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid #242b36;padding:14px}nav{display:flex;overflow:auto;margin-top:10px}nav button{white-space:nowrap;width:auto}.grid,.cockpitGrid{grid-template-columns:1fr 1fr}.cockpitHero,.row2{grid-template-columns:1fr}main{padding:18px}}
+</style></head><body><aside><div class="brand">AI MOVIE STUDIO</div><div class="muted">WEB · v0.1.7</div><nav>
+<button onclick="go('studio')">🏠 Studio</button>
+<button onclick="go('projects')">🎬 项目管理</button>
+<button onclick="go('stories')">💡 故事</button>
+<button onclick="go('scripts')">✍️ 剧本</button>
+<button onclick="go('characters')">🎭 角色</button>
+<button onclick="go('scenes')">🏙 场景</button>
+<button onclick="go('shots')">🎞 分镜</button>
+<button onclick="go('gen')">⚡ AI生成</button>
+<button onclick="go('review')">👁 审片室</button>
+<button onclick="go('audio')">🎙 声音</button>
+<button onclick="go('edit')">✂️ 剪辑</button>
+<button onclick="go('masters')">📦 成片</button>
+<button onclick="go('data')">📊 数据</button>
+<button onclick="go('settings')">⚙ 设置</button>
+</nav></aside><main>
+<section id="studio" class="page on">
+<div class="studioHead"><div><h1>Studio 总控台</h1><p class="muted">整个 AI 影视工作室的项目、产能、GPU、审核与300/90进度。</p></div><button class="btn gold" onclick="go('projects');openWizard()">+ 新建项目</button></div>
+<div class="grid" id="studioKpis"></div>
+<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div><h2 style="margin:0">🎬 全部项目</h2><p class="muted">所有项目的实时生产状态</p></div><select id="projectFilter" onchange="renderStudio()" style="background:#0d1117;color:white;padding:8px;border-radius:7px"><option>全部</option><option>策划中</option><option>制作中</option><option>后期</option><option>已完成</option><option>暂停</option></select></div><div class="studioProjects" id="studioProjects"></div></div>
+<div class="studioCols"><div>
+<div class="card"><h3>📈 300 / 90 总计划</h3><div class="bigstat" id="totalProgress"></div><div class="bar"><i id="totalBar"></i></div><div class="minirow"><span class="muted">目标</span><b>300分钟 / 90天</b></div><div class="minirow"><span class="muted">当前规划项目时长</span><b id="plannedMinutes"></b></div><div class="minirow"><span class="muted">已完成成片</span><b id="finishedMinutes"></b></div><div class="minirow"><span class="muted">剩余目标</span><b id="remainingMinutes"></b></div></div>
+<div class="card"><h3>🧭 制作阶段分布</h3><div id="stageSummary"></div></div>
+</div><div>
+<div class="card"><h3>⚡ Render Nodes</h3><div class="queueItem"><span class="statusDot"></span><b>NODE_01</b><p class="muted">RTX Pro 4000 · 24GB VRAM</p><p id="nodeStatus">等待本地 Connector</p></div><div class="queueItem muted">NODE_02 · 未来扩展</div></div>
+<div class="card"><h3>👁 待处理</h3><div class="minirow"><span>待审核镜头</span><b id="reviewCount">0</b></div><div class="minirow"><span>等待生成</span><b id="queueCount">0</b></div><div class="minirow"><span>需重做</span><b id="redoCount">0</b></div><div class="minirow"><span>MASTER</span><b id="masterCount">0</b></div></div>
+</div></div>
+<div class="card"><h3>工作室生产链</h3><b>💡故事 → ✍️剧本 → 🎭角色 / 🏙场景 → 🎞分镜 → ⚡AI生成 → 👁审片 → 🎙声音 → ✂️Premiere → 📦4K成片 → 📊数据</b></div>
+</section>
+<section id="cockpit" class="page"><div style="display:flex;justify-content:space-between;align-items:end"><div><p class="muted">项目驾驶舱</p><h1 id="cockpitTitle">项目</h1><p class="muted" id="cockpitMeta"></p></div><button class="btn" onclick="go('studio')">← 返回 Studio</button></div>
+<div class="cockpitTabs"><button onclick="cockpitJump('bible')">📖 项目圣经</button><button onclick="go('scripts')">✍️ 剧本</button><button onclick="go('characters')">🎭 角色</button><button onclick="go('scenes')">🏙 场景</button><button onclick="cockpitJump('props')">🎒 道具</button><button onclick="go('shots')">🎞 分镜</button><button onclick="go('gen')">⚡ AI生成</button><button onclick="go('review')">👁 审片</button><button onclick="go('audio')">🎙 声音</button><button onclick="go('edit')">✂️ 剪辑</button><button onclick="go('masters')">📦 成片</button><button onclick="go('data')">📊 数据</button></div>
+<div class="cockpitHero"><div><div class="card"><h3>制作进度</h3><div class="bigstat" id="cpProgress"></div><div class="bar"><i id="cpBar"></i></div><div class="cockpitGrid" id="cpKpis"></div></div><div class="card"><h3>当前制作阶段</h3><div id="cpPhases"></div></div></div>
+<div><div class="card"><h3>今日应该处理</h3><div id="cpTodo"></div></div><div class="card"><h3>生产节点</h3><b>NODE_01</b><p class="muted">RTX Pro 4000 · 24GB</p><p>等待 Local Connector</p></div></div></div>
+<div class="card" id="bible"><h3>📖 项目圣经</h3><div id="cpBible"></div></div><div class="card" id="props"><h3>🎒 核心道具</h3><div id="cpProps"></div></div></section><section id="stories" class="page"><h1>故事库</h1><p class="muted">灵感、社会新闻、原创故事、小说/IP与待开发故事统一进入这里。</p>
+<div class="grid"><div class="card"><b>灵感收集</b><p class="muted">随手记录故事种子</p></div><div class="card"><b>社会新闻</b><p class="muted">真实事件改编素材</p></div><div class="card"><b>原创故事</b><p class="muted">原创项目孵化</p></div><div class="card"><b>待开发</b><p class="muted">进入项目之前的候选池</p></div></div>
+<div class="card"><h3>当前核心故事</h3><b>《人生评分99分》</b><p>一个男人即将获得99分人生，却发现妻子的评分正在归零。</p></div></section>
+
+<section id="scripts" class="page"><h1>剧本中心</h1><p class="muted">故事大纲 → 人物小传 → 场景剧本 → 完稿 → AI拆场/分镜。</p>
+<div class="grid"><div class="card"><b>故事大纲</b><p>主题、人物欲望、冲突、反转、结局。</p></div><div class="card"><b>人物小传</b><p>角色弧光与关系。</p></div><div class="card"><b>场景剧本</b><p>按 Scene 管理对白与动作。</p></div><div class="card"><b>AI 制片</b><p class="warn">后续：自动拆场、估算镜头与GPU任务。</p></div></div></section>
+
+<section id="characters" class="page"><h1>角色资产库</h1><p class="muted">Character ID 是跨镜头、跨项目保持一致性的核心。</p>
+<div class="grid"><div class="card"><h3>陈伟</h3><p>CW_001 · 男主角</p><p>参考图 / 表情 / 服装 / Voice ID / Master Prompt</p></div><div class="card"><h3>李娜</h3><p>LN_001 · 女主角</p><p>参考图 / 表情 / 服装 / Voice ID / Master Prompt</p></div></div></section>
+
+<section id="scenes" class="page"><h1>场景资产库</h1><p class="muted">场景作为资产复用，而不是每个镜头重新生成。</p>
+<div class="grid"><div class="card"><b>陈伟办公室</b><p>SC_001 · 室内</p></div><div class="card"><b>陈伟家</b><p>SC_002 · 室内</p></div><div class="card"><b>未来城市CBD</b><p>SC_003 · 城市</p></div><div class="card"><b>+ 新场景</b></div></div></section>
+
+<section id="audio" class="page"><h1>声音中心</h1><p class="muted">角色声音、对白、旁白、音乐、环境声和音效统一管理。</p>
+<div class="grid"><div class="card"><b>角色 Voice ID</b><p>陈伟 / 李娜</p></div><div class="card"><b>对白队列</b><p>等待 TTS Connector</p></div><div class="card"><b>音乐</b><p>主题音乐 / 场景音乐</p></div><div class="card"><b>音效</b><p>Foley / 环境声 / UI音效</p></div></div></section>
+
+<section id="edit" class="page"><h1>剪辑中心</h1><p class="muted">MASTER 镜头 → 自动素材整理 → 粗剪 → Premiere Pro。</p>
+<div class="card"><b>Premiere Pro 主工作流</b><p>后续输出：素材清单、字幕、对白音轨、音乐音轨、镜头顺序与工程交换文件。</p></div></section>
+
+<section id="masters" class="page"><h1>成片中心</h1><p class="muted">只有最终进入成片的 MASTER 才执行4K，避免浪费GPU。</p>
+<div class="grid"><div class="card"><b>MASTER素材</b><p>导演通过镜头</p></div><div class="card"><b>4K队列</b><p>最终素材后处理</p></div><div class="card"><b>正式成片</b><p>横版主片</p></div><div class="card"><b>宣传版本</b><p>预告 / 竖版 / 封面</p></div></div></section>
+<section id="projects" class="page"><h1>项目管理</h1><p class="muted">创建、切换和管理你的 AI 影视项目。</p>
+<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div><h3>项目中心</h3><p class="muted">每个项目拥有独立的故事、剧本、资产、分镜、生成、审片、声音、剪辑与数据。</p></div><button class="btn gold" onclick="openWizard()">+ 新建项目</button></div></div>
+<div id="wizard" class="hidden">
+<div class="wizardSteps" id="wizardSteps"></div>
+<div class="wizardLayout"><div class="card"><div id="wizardBody"></div><div style="display:flex;justify-content:space-between;margin-top:18px"><button class="btn" onclick="wizardBack()">← 上一步</button><div><button class="btn" onclick="saveDraft()">保存草稿</button> <button class="btn gold" id="wizardNext" onclick="wizardNext()">下一步 →</button></div></div></div>
+<div class="card previewCard"><h3>项目实时预览</h3><div id="wizardPreview"></div></div></div></div>
+<div id="projectList"></div></section><section id="shots" class="page"><h1>分镜生产台</h1><button class="btn gold" onclick="addShot()">+ 新建镜头</button><p class="muted">这一版无需安装 Python，数据保存在浏览器本机。</p><table><thead><tr><th>镜头</th><th>画面</th><th>角色</th><th>场景</th><th>秒</th><th>状态</th><th>操作</th></tr></thead><tbody id="shotrows"></tbody></table><div class="card" id="editor" style="display:none"><h3 id="editTitle"></h3><textarea id="prompt"></textarea><p><button class="btn gold" onclick="savePrompt()">保存 Prompt</button></p></div></section>
+<section id="gen" class="page"><h1>AI 生成队列</h1><div class="card"><b>NODE_01 · RTX Pro 4000 24GB</b><p class="warn">本版先保证工作台零安装可打开。真实 H3 Worker 下一版通过本地 Connector 接入。</p></div><table><thead><tr><th>任务</th><th>镜头</th><th>状态</th></tr></thead><tbody id="jobs"></tbody></table></section>
+<section id="review" class="page"><h1>导演审片室</h1><div class="card muted">真实 H3 接入后，这里显示 v001 / v002 / v003 视频并选择 MASTER。</div></section>
+<section id="assets" class="page"><h1>资产中心</h1><div class="grid"><div class="card"><b>角色</b><p>陈伟 CW_001</p><p>李娜 LN_001</p></div><div class="card"><b>场景</b><p>办公室</p><p>未来城市CBD</p></div><div class="card"><b>道具</b><p>人生评分 APP</p></div></div></section>
+<section id="data" class="page"><h1>300 / 90 数据</h1><div class="card">目标：300分钟 / 90天 · 要求平均日产约 3.33 分钟最终成片。</div></section>
+<section id="settings" class="page"><h1>设置</h1><div class="card"><b class="ok">✓ Web 工作台：已运行</b><p>数据：浏览器 localStorage</p><p>Render Node：等待 Connector</p><p>Minimax H3：等待 Connector</p><button class="btn" onclick="resetData()">恢复初始数据</button></div></section>
+<script>
+const INITIAL={"project": {"name": "人生评分99分", "universe": "未来人间", "target": 15}, "shots": [{"id": "S01_SH001", "desc": "未来城市建立镜头", "char": "—", "scene": "未来城市CBD", "dur": 5, "status": "待制作", "prompt": "写实电影感，未来中国城市清晨，社会评分系统融入日常环境。"}, {"id": "S01_SH002", "desc": "陈伟进入办公室", "char": "陈伟", "scene": "办公室", "dur": 6, "status": "待制作", "prompt": "陈伟进入现代办公室，中年精英感，自然表演，稳定跟拍。"}, {"id": "S01_SH003", "desc": "人生评分手机特写", "char": "陈伟", "scene": "办公室", "dur": 4, "status": "待制作", "prompt": "手机显示人生评分98.7，轻微俯拍，slow push in，不安。"}, {"id": "S01_SH004", "desc": "陈伟表情变化", "char": "陈伟", "scene": "办公室", "dur": 5, "status": "待制作", "prompt": "陈伟从平静转为疑惑不安，微表情，浅景深。"}], "jobs": [], "generations": [], "node": {"name": "NODE_01", "gpu": "RTX Pro 4000 24GB", "status": "未连接"}}; let D=JSON.parse(localStorage.getItem("aimovie_data")||JSON.stringify(INITIAL)),editing=null;
+function migrate(){
+ if(!D.projects){D.projects=[D.project||{id:"P001",name:"人生评分99分",universe:"未来人间",type:"旗舰作品",target:15,status:"制作中"}];delete D.project}
+ if(!D.activeProjectId)D.activeProjectId=D.projects[0].id;
+ D.shots.forEach(x=>{if(!x.projectId)x.projectId="P001"});
+ localStorage.setItem("aimovie_data",JSON.stringify(D));
+}
+migrate();
+function activeProject(){return D.projects.find(x=>x.id===D.activeProjectId)||D.projects[0]}
+function projectShots(){return D.shots.filter(x=>x.projectId===D.activeProjectId)}
+let WSTEP=0,W={name:"",universe:"独立世界观",type:"旗舰作品",target:15,episodes:1,priority:"高",status:"策划中",logline:"",synopsis:"",theme:"",genre:"家庭 / 悬疑 / 科幻",audience:"30-45岁",emotion:"震惊 / 温暖 / 思考",ending:"哲学余味",realityTech:"50 / 50",aspect:"16:9",resolution:"4K",fps:24,style:"写实电影感",avgShot:"4-6秒",model:"Minimax H3",automation:"L4",node:"NODE_01",night:true,retries:3,candidates:3};
+const WN=["基本信息","故事设定","制作规格","AI自动化","生产资源","AI预估"];
+function openWizard(){wizard.classList.remove("hidden");WSTEP=0;drawWizard();wizard.scrollIntoView({behavior:"smooth"})}
+function val(id,key){let e=document.getElementById(id);if(e)e.oninput=()=>{W[key]=e.type==="number"?Number(e.value):e.value;drawPreview()}}
+function drawWizard(){
+ wizardSteps.innerHTML=WN.map((x,i)=>'<div class="step '+(i===WSTEP?'active':'')+'"><b>'+(i+1)+'</b><br>'+x+'</div>').join("");
+ let b="";
+ if(WSTEP===0)b=`<h2>① 基本信息</h2><div class="formgrid">
+ <div class="field"><label>项目名称 *</label><input id="wname" value="${W.name}" placeholder="例如：人生评分99分"></div>
+ <div class="field"><label>所属系列 / IP</label><input id="wuniverse" value="${W.universe}"></div>
+ <div class="field"><label>项目类型</label><select id="wtype"><option>旗舰作品</option><option>系列故事</option><option>短篇实验</option><option>连续剧</option></select></div>
+ <div class="field"><label>目标时长（分钟）</label><input id="wtarget" type="number" value="${W.target}"></div>
+ <div class="field"><label>集数</label><input id="wepisodes" type="number" value="${W.episodes}"></div>
+ <div class="field"><label>优先级</label><select id="wpriority"><option>高</option><option>中</option><option>低</option></select></div></div>`;
+ if(WSTEP===1)b=`<h2>② 故事设定</h2><div class="field"><label>一句话故事</label><textarea id="wlogline">${W.logline}</textarea></div><div class="field"><label>故事梗概</label><textarea id="wsynopsis">${W.synopsis}</textarea></div><div class="formgrid"><div class="field"><label>核心命题</label><input id="wtheme" value="${W.theme}"></div><div class="field"><label>类型</label><input id="wgenre" value="${W.genre}"></div><div class="field"><label>目标观众</label><input id="waudience" value="${W.audience}"></div><div class="field"><label>情绪目标</label><input id="wemotion" value="${W.emotion}"></div><div class="field"><label>结局气质</label><input id="wending" value="${W.ending}"></div><div class="field"><label>现实 / 科技比例</label><input id="wrt" value="${W.realityTech}"></div></div>`;
+ if(WSTEP===2)b=`<h2>③ 制作规格</h2><div class="formgrid"><div class="field"><label>画幅</label><select id="waspect"><option>16:9</option><option>9:16</option><option>2.39:1</option><option>1:1</option></select></div><div class="field"><label>最终分辨率</label><select id="wres"><option>4K</option><option>1080p</option></select></div><div class="field"><label>帧率</label><select id="wfps"><option>24</option><option>25</option><option>30</option></select></div><div class="field"><label>视觉风格</label><select id="wstyle"><option>写实电影感</option><option>国风水墨</option><option>黑暗赛博朋克</option><option>自定义</option></select></div><div class="field"><label>平均镜头</label><select id="wavg"><option>4-6秒</option><option>2-4秒</option><option>6-8秒</option></select></div><div class="field"><label>主视频模型</label><select id="wmodel"><option>Minimax H3</option><option>其他 Adapter</option></select></div></div>`;
+ if(WSTEP===3)b=`<h2>④ AI 自动化等级</h2><div class="choicegrid">${[["L1","手动","AI只辅助"],["L2","AI辅助","Prompt与建议"],["L3","半自动","拆镜+生成+排队"],["L4","自动制作","剧本→生产→导演审核"]].map(x=>`<div class="choice ${W.automation===x[0]?'sel':''}" onclick="W.automation='${x[0]}';drawWizard()"><b>${x[0]} · ${x[1]}</b><p class="muted">${x[2]}</p></div>`).join("")}</div><div class="card"><b>L4目标流程</b><p>剧本 → AI拆场 → AI分镜 → 调用角色/场景资产 → Prompt Compiler → GPU队列 → 自动生成 → 自动重试 → AI初检 → 导演最终审核</p></div>`;
+ if(WSTEP===4)b=`<h2>⑤ 生产资源</h2><div class="card"><b>NODE_01</b><p>RTX Pro 4000 · 24GB VRAM</p><p class="ok">✓ 主生产节点</p></div><div class="formgrid"><div class="field"><label>失败最大重试</label><input id="wretry" type="number" value="${W.retries}"></div><div class="field"><label>每镜头候选版本</label><input id="wcandidates" type="number" value="${W.candidates}"></div></div><div class="choice ${W.night?'sel':''}" onclick="W.night=!W.night;drawWizard()"><b>夜间无人值守</b><p>${W.night?'已开启':'已关闭'}</p></div>`;
+ if(WSTEP===5){let shots=Math.round(W.target*60/5),tasks=Math.round(shots*2.4),con=(W.target/300*100).toFixed(1);b=`<h2>⑥ AI 项目预估</h2><div class="grid"><div class="k"><span class="muted">预计成片</span><b>${W.target}:00</b></div><div class="k"><span class="muted">预计最终镜头</span><b>${shots}</b></div><div class="k"><span class="muted">预计生成任务</span><b>${tasks}</b></div><div class="k"><span class="muted">300/90贡献</span><b>${con}%</b></div></div><div class="card"><h3>制作风险（初步）</h3><div class="risk">⚠ 多角色/双人镜头需要重点控制一致性</div><div class="risk">⚠ UI、手机屏幕等关键道具建议建立标准资产</div><div class="risk">✓ 4K只处理最终MASTER素材</div></div><p class="muted">当前为规则估算；后续 AI 制片人将根据完整剧本给出场景、角色、镜头、GPU时间和人工时间预测。</p>`}
+ wizardBody.innerHTML=b;wizardNext.textContent=WSTEP===5?"创建项目并生成制作计划":"下一步 →";
+ [["wname","name"],["wuniverse","universe"],["wtarget","target"],["wepisodes","episodes"],["wlogline","logline"],["wsynopsis","synopsis"],["wtheme","theme"],["wgenre","genre"],["waudience","audience"],["wemotion","emotion"],["wending","ending"],["wrt","realityTech"],["wretry","retries"],["wcandidates","candidates"]].forEach(x=>val(x[0],x[1]));
+ [["wtype","type"],["wpriority","priority"],["waspect","aspect"],["wres","resolution"],["wfps","fps"],["wstyle","style"],["wavg","avgShot"],["wmodel","model"]].forEach(x=>{let e=document.getElementById(x[0]);if(e){e.value=W[x[1]];e.onchange=()=>{W[x[1]]=e.value;drawPreview()}}});
+ drawPreview();
+}
+function drawPreview(){let contribution=(Number(W.target||0)/300*100).toFixed(1);wizardPreview.innerHTML=`<h2>《${W.name||"未命名项目"}》</h2><p class="muted">${W.universe} · ${W.type}</p><p><b>${W.target}分钟</b> · ${W.episodes}集 · 优先级 ${W.priority}</p><hr style="border-color:#29313d"><p>${W.logline||"填写一句话故事后，这里实时显示。"}</p><p><span class="muted">视觉：</span>${W.style}</p><p><span class="muted">自动化：</span>${W.automation}</p><p><span class="muted">节点：</span>NODE_01 · RTX Pro 4000 24GB</p><h3>300/90 贡献</h3><div class="bigstat">${W.target}:00 / 300:00</div><p class="muted">约占总目标 ${contribution}%</p>`}
+function wizardNext(){if(WSTEP===0&&!W.name.trim())return alert("请填写项目名称");if(WSTEP<5){WSTEP++;drawWizard();return}createFromWizard()}
+function wizardBack(){if(WSTEP>0){WSTEP--;drawWizard()}else wizard.classList.add("hidden")}
+function saveDraft(){localStorage.setItem("aimovie_wizard_draft",JSON.stringify(W));alert("项目草稿已保存在本机浏览器。")}
+function createFromWizard(){let id="AMS-"+String(D.projects.length+1).padStart(3,"0");D.projects.push({id,name:W.name,universe:W.universe,type:W.type,target:Number(W.target),status:"策划中",created:new Date().toLocaleDateString(),wizard:JSON.parse(JSON.stringify(W))});D.activeProjectId=id;persist();wizard.classList.add("hidden");alert("项目已创建："+W.name);render();openCockpit(id)}
+function switchProject(id){D.activeProjectId=id;persist();render()}
+function deleteProject(id){
+ if(D.projects.length<=1)return alert("至少保留一个项目");
+ let p=D.projects.find(x=>x.id===id);if(!confirm("删除项目《"+p.name+"》？\n项目下的分镜也会一起删除。"))return;
+ D.projects=D.projects.filter(x=>x.id!==id);D.shots=D.shots.filter(x=>x.projectId!==id);
+ if(D.activeProjectId===id)D.activeProjectId=D.projects[0].id;persist();
+}
+function setProjectStatus(id,status){let p=D.projects.find(x=>x.id===id);if(p)p.status=status;persist()}
+
+function persist(){localStorage.setItem("aimovie_data",JSON.stringify(D));render()}
+function go(id){document.querySelectorAll(".page").forEach(x=>x.classList.remove("on"));document.getElementById(id).classList.add("on")}
+function render(){let P=activeProject(),PS=projectShots();let done=D.shots.filter(x=>x.status==="完成").reduce((a,b)=>a+b.dur,0);
+document.querySelector("#studio .card h2").textContent="《"+P.name+"》";
+document.querySelector("#studio .card .muted").textContent=(P.universe||"")+" · "+(P.type||"")+" · 当前项目";
+projectList.innerHTML=D.projects.map(p=>{
+ let ss=D.shots.filter(x=>x.projectId===p.id),sec=ss.filter(x=>x.status==="完成").reduce((a,b)=>a+b.dur,0);
+ return '<div class="card" style="border-color:'+(p.id===D.activeProjectId?'#e8b15d':'#29313d')+'"><div style="display:flex;justify-content:space-between;gap:12px"><div><h2 style="margin:0 0 5px">《'+p.name+'》</h2><span class="muted">'+p.id+' · '+p.universe+' · '+p.type+' · 目标 '+p.target+' 分钟</span><p>分镜 '+ss.length+' · 已完成 '+(sec/60).toFixed(2)+' 分钟</p></div><div><select onchange="setProjectStatus(\''+p.id+'\',this.value)" style="background:#0d1117;color:white;padding:8px;border-radius:7px"><option '+(p.status==="策划中"?"selected":"")+'>策划中</option><option '+(p.status==="制作中"?"selected":"")+'>制作中</option><option '+(p.status==="后期"?"selected":"")+'>后期</option><option '+(p.status==="已完成"?"selected":"")+'>已完成</option><option '+(p.status==="暂停"?"selected":"")+'>暂停</option></select> <button class="btn gold" onclick="openCockpit(\''+p.id+'\')">'+(p.id===D.activeProjectId?'当前项目':'打开项目')+'</button> <button class="btn" onclick="deleteProject(\''+p.id+'\')">删除</button></div></div></div>'
+}).join("");
+studioKpis.innerHTML=[["300分钟进度",(done/60).toFixed(2)+" / 300"],["镜头数",D.shots.length],["生成队列",D.jobs.length],["NODE_01",D.node.status]].map(x=>'<div class="k"><span class="muted">'+x[0]+'</span><b>'+x[1]+'</b></div>').join("");
+shotrows.innerHTML=PS.map((x)=>'<tr><td><b>'+x.id+'</b></td><td>'+x.desc+'</td><td>'+x.char+'</td><td>'+x.scene+'</td><td>'+x.dur+'</td><td>'+x.status+'</td><td><button class="btn" onclick="editById(\''+x.id+'\')">Prompt</button> <button class="btn gold" onclick="queueById(\''+x.id+'\')">加入队列</button></td></tr>').join("");
+jobs.innerHTML=D.jobs.map((x,i)=>'<tr><td>Q'+String(i+1).padStart(3,"0")+'</td><td>'+x.shot+'</td><td>'+x.status+'</td></tr>').join("")||'<tr><td colspan="3" class="muted">暂无任务</td></tr>';renderStudio();renderCockpit();}
+function editById(id){editing=D.shots.findIndex(x=>x.id===id);editor.style.display="block";editTitle.textContent=D.shots[editing].id;prompt.value=D.shots[editing].prompt;editor.scrollIntoView({behavior:"smooth"})}
+function savePrompt(){D.shots[editing].prompt=prompt.value;persist()}
+function queueById(id){let i=D.shots.findIndex(x=>x.id===id);D.shots[i].status="等待 Worker";D.jobs.push({shot:D.shots[i].id,projectId:D.shots[i].projectId,status:"等待本地 H3 Connector"});persist();go("gen")}
+function addShot(){let n=projectShots().length+1;D.shots.push({id:"S"+String(n).padStart(2,"0")+"_SH001_"+String(Date.now()).slice(-4),projectId:D.activeProjectId,desc:"新镜头",char:"—",scene:"待定",dur:5,status:"待制作",prompt:""});persist()}
+function openCockpit(id){D.activeProjectId=id;persist();render();go("cockpit")}
+function cockpitJump(id){document.getElementById(id)?.scrollIntoView({behavior:"smooth"})}
+function renderCockpit(){
+ let p=activeProject(),ss=projectShots(),finishedSec=ss.filter(x=>x.status==="完成").reduce((a,b)=>a+Number(b.dur||0),0),finished=finishedSec/60,target=Number(p.target||1),pct=Math.min(100,finished/target*100);
+ cockpitTitle.textContent="《"+p.name+"》";cockpitMeta.textContent=p.id+" · "+p.universe+" · "+p.type+" · "+p.status+" · 目标 "+target+" 分钟";
+ cpProgress.textContent=finished.toFixed(2)+" / "+target.toFixed(0)+" 分钟";cpBar.style.width=pct+"%";
+ let review=ss.filter(x=>x.status==="待审核").length,redo=ss.filter(x=>x.status==="需重做").length,waiting=ss.filter(x=>x.status==="等待 Worker").length,master=ss.filter(x=>x.status==="完成").length;
+ cpKpis.innerHTML=[["总分镜",ss.length],["等待生成",waiting],["待审核",review],["MASTER",master]].map(x=>'<div class="k"><span class="muted">'+x[0]+'</span><b>'+x[1]+'</b></div>').join("");
+ let wiz=p.wizard||{},phases=[["故事/项目圣经",wiz.logline||wiz.synopsis?"已建立":"待完善"],["剧本","待接入编辑器"],["角色/场景资产",ss.length?"生产前检查":"待建立"],["分镜",ss.length+" 个镜头"],["AI生成",waiting+" 等待 / "+review+" 待审核"],["后期/成片",master+" MASTER"]];
+ cpPhases.innerHTML=phases.map(x=>'<div class="phase"><b>'+x[0]+'</b><span style="float:right" class="muted">'+x[1]+'</span></div>').join("");
+ let todos=[];if(!wiz.logline)todos.push(["完善一句话故事","故事"]);if(ss.length===0)todos.push(["创建第一批分镜","分镜"]);if(waiting)todos.push(["等待 GPU 生成",waiting+" 镜头"]);if(review)todos.push(["进入审片室",review+" 镜头"]);if(redo)todos.push(["处理需重做镜头",redo+" 镜头"]);if(!todos.length)todos.push(["继续推进当前制作阶段",""]);
+ cpTodo.innerHTML=todos.map(x=>'<div class="todo"><span>'+x[0]+'</span><b>'+x[1]+'</b></div>').join("");
+ cpBible.innerHTML='<div class="formgrid"><div><span class="muted">一句话故事</span><p>'+(wiz.logline||"尚未填写")+'</p></div><div><span class="muted">核心命题</span><p>'+(wiz.theme||"尚未填写")+'</p></div><div><span class="muted">目标观众</span><p>'+(wiz.audience||"尚未填写")+'</p></div><div><span class="muted">视觉风格</span><p>'+(wiz.style||"尚未填写")+'</p></div><div><span class="muted">AI自动化</span><p>'+(wiz.automation||"L4")+'</p></div><div><span class="muted">主模型</span><p>'+(wiz.model||"Minimax H3")+'</p></div></div>';
+ cpProps.innerHTML='<p><b>人生评分 APP</b> <span class="muted">PR_001 · 核心叙事道具 / UI需保持一致</span></p><p class="muted">后续这里将从项目道具数据库动态读取。</p>';
+}
+function renderStudio(){
+ let filter=document.getElementById("projectFilter")?.value||"全部";
+ let list=D.projects.filter(p=>filter==="全部"||p.status===filter);
+ let totalPlanned=D.projects.reduce((a,p)=>a+Number(p.target||0),0);
+ let finishedSec=D.shots.filter(x=>x.status==="完成").reduce((a,b)=>a+Number(b.dur||0),0),finished=finishedSec/60;
+ studioKpis.innerHTML=[
+ ["项目总数",D.projects.length],["制作中",D.projects.filter(x=>x.status==="制作中").length],["规划分钟",totalPlanned.toFixed(0)],["已完成分钟",finished.toFixed(2)]
+ ].map(x=>'<div class="k"><span class="muted">'+x[0]+'</span><b>'+x[1]+'</b></div>').join("");
+ studioProjects.innerHTML=list.map(p=>{let ss=D.shots.filter(x=>x.projectId===p.id),sec=ss.filter(x=>x.status==="完成").reduce((a,b)=>a+Number(b.dur||0),0),pct=Math.min(100,(sec/60)/(Number(p.target)||1)*100);
+ return '<div class="projectCard '+(p.id===D.activeProjectId?'active':'')+'" onclick="openCockpit(\''+p.id+'\')"><div style="display:flex;justify-content:space-between"><b>《'+p.name+'》</b><span class="muted">'+p.status+'</span></div><p class="muted">'+p.id+' · '+p.universe+' · '+p.type+'</p><div class="bar"><i style="width:'+pct+'%"></i></div><div class="minirow"><span>完成 '+(sec/60).toFixed(2)+' / '+p.target+' 分钟</span><span>'+pct.toFixed(0)+'%</span></div><div class="minirow muted"><span>分镜 '+ss.length+'</span><span>待审核 '+ss.filter(x=>x.status==="待审核").length+' · 重做 '+ss.filter(x=>x.status==="需重做").length+'</span></div></div>'}).join("")||'<div class="card muted">这个状态下暂无项目。</div>';
+ totalProgress.textContent=finished.toFixed(2)+" / 300 分钟";totalBar.style.width=Math.min(100,finished/300*100)+"%";plannedMinutes.textContent=totalPlanned.toFixed(0)+" 分钟";finishedMinutes.textContent=finished.toFixed(2)+" 分钟";remainingMinutes.textContent=Math.max(0,300-finished).toFixed(2)+" 分钟";
+ let stages=["策划中","制作中","后期","已完成","暂停"];stageSummary.innerHTML=stages.map(s=>'<div class="minirow"><span>'+s+'</span><b>'+D.projects.filter(p=>p.status===s).length+' 个项目</b></div>').join("");
+ reviewCount.textContent=D.shots.filter(x=>x.status==="待审核").length;queueCount.textContent=D.shots.filter(x=>x.status==="等待 Worker").length;redoCount.textContent=D.shots.filter(x=>x.status==="需重做").length;masterCount.textContent=D.shots.filter(x=>x.status==="完成").length;
+}
+function resetData(){localStorage.removeItem("aimovie_data");D=JSON.parse(JSON.stringify(INITIAL));persist()} render();
+
+/* v0.2 production extensions: legacy aimovie_data stays readable. */
+const esc=s=>String(s??"").replace(/[&<>\"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+function uid(prefix){return prefix+"_"+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function upgrade(){
+ D.projects.forEach(p=>{p.bible=p.bible||{logline:p.wizard?.logline||"",synopsis:p.wizard?.synopsis||"",theme:p.wizard?.theme||"",genre:p.wizard?.genre||"",style:p.wizard?.style||"写实电影感"};});
+ ["scripts","characters","scenes","props","generations","reviews","masters","audio","exports"].forEach(k=>D[k]=Array.isArray(D[k])?D[k]:[]);
+ D.connector=D.connector||{endpoint:"http://127.0.0.1:8080",status:"未连接",lastCheck:"—"}; D.production=D.production||{goalMinutes:300,days:90,startDate:new Date().toISOString().slice(0,10)};
+ localStorage.setItem("aimovie_data",JSON.stringify(D));
+}
+function persist(){localStorage.setItem("aimovie_data",JSON.stringify(D));renderAll()}
+function go(id){document.querySelectorAll(".page").forEach(x=>x.classList.remove("on"));document.getElementById(id).classList.add("on");renderAll()}
+function renderAll(){render();renderModules()}
+function items(kind){return D[kind].filter(x=>x.projectId===D.activeProjectId)}
+function saveBible(){let p=activeProject();["logline","synopsis","theme","genre","style"].forEach(k=>p.bible[k]=document.getElementById("b_"+k).value);persist()}
+function renderModules(){let p=activeProject(); if(!p)return;
+ document.querySelector("#stories").innerHTML=`<h1>故事与项目圣经</h1><p class="muted">《${esc(p.name)}》的可编辑创作基线，数据随项目保存。</p><div class="card"><div class="formgrid"><div class="field"><label>一句话故事</label><input id="b_logline" value="${esc(p.bible.logline)}"></div><div class="field"><label>核心命题</label><input id="b_theme" value="${esc(p.bible.theme)}"></div><div class="field"><label>类型</label><input id="b_genre" value="${esc(p.bible.genre)}"></div><div class="field"><label>视觉风格</label><input id="b_style" value="${esc(p.bible.style)}"></div></div><div class="field"><label>故事梗概</label><textarea id="b_synopsis">${esc(p.bible.synopsis)}</textarea></div><button class="btn gold" onclick="saveBible()">保存项目圣经</button></div>`;
+ renderScripts();renderAssets("characters","角色","CH");renderAssets("scenes","场景","SC");renderShots2();renderGeneration();renderReview();renderAudio();renderEdit();renderMasters();renderData();renderSettings();
+}
+function renderScripts(){let a=items("scripts");document.querySelector("#scripts").innerHTML=`<h1>剧本编辑器</h1><p class="muted">按项目、集和场景保存；可从场景剧本建立分镜。</p><div class="toolbar"><button class="btn gold" onclick="newScript()">+ 新建场景剧本</button><span class="muted">${a.length} 个场景</span></div><div id="scriptList">${a.map(s=>`<div class="card"><div style="display:flex;justify-content:space-between"><b>${esc(s.title)}</b><span class="status">${esc(s.status||"草稿")}</span></div><p class="assetMeta">${esc(s.slugline||"")}</p><textarea id="script_${s.id}">${esc(s.content||"")}</textarea><p><button class="btn" onclick="saveScript('${s.id}')">保存</button> <button class="btn gold" onclick="scriptToShot('${s.id}')">生成首个分镜</button></p></div>`).join("")||'<div class="card empty">尚无剧本场景。</div>'}</div>`}
+function newScript(){D.scripts.push({id:uid("SCR"),projectId:D.activeProjectId,title:"新场景",slugline:"INT. 待定 — DAY",content:"",status:"草稿"});persist()}
+function saveScript(id){let s=D.scripts.find(x=>x.id===id);s.content=document.getElementById("script_"+id).value;s.status="编辑中";persist()}
+function scriptToShot(id){let s=D.scripts.find(x=>x.id===id),n=projectShots().length+1;D.shots.push({id:"S"+String(n).padStart(2,"0")+"_SH001",projectId:D.activeProjectId,scriptId:id,desc:s.title,char:"—",scene:"待定",dur:5,status:"待制作",prompt:s.content||s.title});persist();go("shots")}
+function renderAssets(kind,label,prefix){let a=items(kind);document.querySelector("#"+kind).innerHTML=`<h1>${label}资产数据库</h1><p class="muted">项目级 ID、连续性备注和提示词，供分镜与生成队列复用。</p><div class="toolbar"><button class="btn gold" onclick="newAsset('${kind}','${prefix}')">+ 新建${label}</button><span class="muted">${a.length} 个资产</span></div><div class="grid">${a.map(x=>`<div class="card assetCard"><h3>${esc(x.name)}</h3><div class="assetMeta">${esc(x.assetId)} · ${esc(x.type||label)}<br>${esc(x.notes||"未添加连续性备注")}</div><p><button class="btn" onclick="editAsset('${kind}','${x.id}')">编辑</button></p></div>`).join("")||'<div class="card empty">暂无资产。</div>'}</div>`}
+function newAsset(kind,prefix){let name=prompt("名称");if(!name)return;D[kind].push({id:uid(prefix),projectId:D.activeProjectId,assetId:prefix+"_"+String(items(kind).length+1).padStart(3,"0"),name,type:"核心资产",notes:"",prompt:""});persist()}
+function editAsset(kind,id){let x=D[kind].find(v=>v.id===id),notes=prompt("连续性备注",x.notes);if(notes===null)return;x.notes=notes;let pr=prompt("Master Prompt",x.prompt);if(pr!==null)x.prompt=pr;persist()}
+function renderShots2(){let ss=projectShots();document.querySelector("#shots").innerHTML=`<h1>分镜数据库</h1><div class="toolbar"><button class="btn gold" onclick="addShot()">+ 新建镜头</button><button class="btn" onclick="go('scripts')">从剧本创建</button><span class="muted">${ss.length} 个镜头</span></div><table><thead><tr><th>镜头</th><th>画面</th><th>秒</th><th>状态</th><th>操作</th></tr></thead><tbody>${ss.map(x=>`<tr><td>${esc(x.id)}</td><td>${esc(x.desc)}</td><td>${x.dur}</td><td>${esc(x.status)}</td><td><button class="btn" onclick="editShot('${x.id}')">编辑</button> <button class="btn gold" onclick="queueById('${x.id}')">入队</button></td></tr>`).join("")||'<tr><td colspan="5" class="muted">暂无镜头</td></tr>'}</tbody></table>`}
+function editShot(id){let x=D.shots.find(v=>v.id===id);let d=prompt("画面描述",x.desc);if(d===null)return;x.desc=d;let p=prompt("生成 Prompt",x.prompt);if(p!==null)x.prompt=p;persist()}
+function queueById(id){let x=D.shots.find(v=>v.id===id);if(D.jobs.some(j=>j.shot===id&&!["失败","已取消"].includes(j.status)))return alert("该镜头已在队列中");x.status="等待 Worker";D.jobs.push({id:uid("JOB"),shot:id,projectId:x.projectId,status:"等待本地 H3 Connector",model:"Minimax H3",candidates:activeProject().wizard?.candidates||3,createdAt:new Date().toLocaleString()});persist();go("gen")}
+function renderGeneration(){let a=items("jobs");document.querySelector("#gen").innerHTML=`<h1>Generation Queue</h1><div class="card"><b>Local Connector · ${esc(D.connector.status)}</b><p class="muted">端点：${esc(D.connector.endpoint)} · NODE_01：RTX Pro 4000 24GB · 模型：Minimax H3</p><button class="btn" onclick="checkConnector()">检查 Connector</button></div><table><thead><tr><th>任务</th><th>镜头</th><th>模型</th><th>候选</th><th>状态</th><th>操作</th></tr></thead><tbody>${a.map(j=>`<tr><td>${esc(j.id)}</td><td>${esc(j.shot)}</td><td>${esc(j.model)}</td><td>${j.candidates}</td><td>${esc(j.status)}</td><td><button class="btn gold" onclick="simulateGeneration('${j.id}')">模拟完成</button></td></tr>`).join("")||'<tr><td colspan="6" class="muted">暂无任务</td></tr>'}</tbody></table>`}
+async function checkConnector(){D.connector.lastCheck=new Date().toLocaleString();try{let r=await fetch(D.connector.endpoint+"/health",{signal:AbortSignal.timeout(2500)});D.connector.status=r.ok?"已连接":"响应异常"}catch(e){D.connector.status="未连接（可继续离线排队）"}persist()}
+function simulateGeneration(id){let j=D.jobs.find(x=>x.id===id),sh=D.shots.find(x=>x.id===j.shot);j.status="已生成，待审核";sh.status="待审核";D.generations.push({id:uid("GEN"),projectId:j.projectId,jobId:id,shot:j.shot,version:"v001",status:"待审核",model:j.model,createdAt:new Date().toLocaleString()});persist();go("review")}
+function renderReview(){let a=items("generations");document.querySelector("#review").innerHTML=`<h1>多版本审片室</h1><p class="muted">选择 MASTER；只有 MASTER 才进入声音、Premiere 与 4K 流程。</p>${a.map(g=>`<div class="card"><b>${esc(g.shot)} · ${esc(g.version)}</b><p class="assetMeta">${esc(g.model)} · ${esc(g.status)} · ${esc(g.createdAt)}</p><button class="btn gold" onclick="approveMaster('${g.id}')">设为 MASTER</button> <button class="btn" onclick="redoGeneration('${g.id}')">需重做</button></div>`).join("")||'<div class="card empty">没有可审核版本。</div>'}`}
+function approveMaster(id){let g=D.generations.find(x=>x.id===id);g.status="MASTER";let sh=D.shots.find(x=>x.id===g.shot);sh.status="完成";if(!D.masters.some(x=>x.generationId===id))D.masters.push({id:uid("MASTER"),projectId:g.projectId,generationId:id,shot:g.shot,status:"已批准",resolution:"1080p"});persist();go("masters")}
+function redoGeneration(id){let g=D.generations.find(x=>x.id===id),sh=D.shots.find(x=>x.id===g.shot);g.status="需重做";sh.status="需重做";persist()}
+function renderAudio(){let a=items("audio");document.querySelector("#audio").innerHTML=`<h1>声音中心</h1><div class="toolbar"><button class="btn gold" onclick="newAudio()">+ 添加声音任务</button><span class="muted">对白、旁白、音乐、环境声统一跟踪。</span></div>${a.map(x=>`<div class="card"><b>${esc(x.name)}</b><p class="assetMeta">${esc(x.type)} · ${esc(x.status)}</p></div>`).join("")||'<div class="card empty">尚无声音任务。</div>'}`}
+function newAudio(){let name=prompt("声音任务名称");if(!name)return;D.audio.push({id:uid("AUD"),projectId:D.activeProjectId,name,type:"对白",status:"待制作"});persist()}
+function renderEdit(){let a=items("masters");document.querySelector("#edit").innerHTML=`<h1>Premiere 交付中心</h1><div class="card"><b>可交付 MASTER：${a.length}</b><p class="muted">导出镜头清单（CSV 兼容结构）供 Premiere Pro 建立序列。</p><button class="btn gold" onclick="exportPremiere()">生成 Premiere 清单</button></div>`}
+function exportPremiere(){let a=items("masters");D.exports.push({id:uid("PR"),projectId:D.activeProjectId,type:"Premiere 清单",count:a.length,createdAt:new Date().toLocaleString()});persist();alert("Premiere 清单已记录，可在数据中心追踪。")}
+function renderMasters(){let a=items("masters");document.querySelector("#masters").innerHTML=`<h1>MASTER 与 4K 成片</h1><p class="muted">最终通过素材才执行 4K，控制 GPU 成本。</p>${a.map(x=>`<div class="card"><b>${esc(x.shot)}</b><p class="assetMeta">${esc(x.status)} · ${esc(x.resolution)}</p><button class="btn gold" onclick="upscale4k('${x.id}')">加入 4K 队列</button></div>`).join("")||'<div class="card empty">尚无 MASTER。</div>'}`}
+function upscale4k(id){let x=D.masters.find(v=>v.id===id);x.resolution="4K 队列";x.status="4K 处理中";persist()}
+function renderData(){let goal=D.production.goalMinutes,done=D.shots.filter(x=>x.status==="完成").reduce((n,x)=>n+Number(x.dur||0),0)/60,days=D.production.days;document.querySelector("#data").innerHTML=`<h1>300 / 90 生产数据系统</h1><div class="grid"><div class="k"><span class="muted">总目标</span><b>${goal} 分钟</b></div><div class="k"><span class="muted">已完成</span><b>${done.toFixed(2)} 分钟</b></div><div class="k"><span class="muted">每日目标</span><b>${(goal/days).toFixed(2)} 分钟</b></div><div class="k"><span class="muted">剩余</span><b>${Math.max(0,goal-done).toFixed(2)} 分钟</b></div></div><div class="card"><div class="progressLine"><label><span>产能达成</span><span>${(done/goal*100).toFixed(1)}%</span></label><div class="bar"><i style="width:${Math.min(100,done/goal*100)}%"></i></div></div><p class="muted">项目、镜头、队列、审核、MASTER、4K 与 Premiere 交付均写入同一浏览器本地数据库。</p></div>`}
+function renderSettings(){document.querySelector("#settings").innerHTML=`<h1>设置</h1><div class="card"><b>Local Connector</b><p class="muted">为 H3 / NODE_01 提供本地 HTTP 桥接；离线时仍可安全排队。</p><input id="connectorEndpoint" value="${esc(D.connector.endpoint)}"><p><button class="btn" onclick="saveConnector()">保存端点</button> <button class="btn" onclick="checkConnector()">检查连接</button></p><p>状态：${esc(D.connector.status)} · 上次检查：${esc(D.connector.lastCheck)}</p></div><div class="card"><button class="btn" onclick="resetData()">恢复初始数据</button></div>`}
+function saveConnector(){D.connector.endpoint=document.getElementById("connectorEndpoint").value.replace(/\/$/,"");persist()}
+upgrade();renderAll();
+</script></main></body></html>
