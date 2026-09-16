@@ -21,6 +21,7 @@ function comfyGraph(job) { const frames=h3FrameCount(job.duration), prompt=job.p
   "7":{class_type:"SaveVideo",inputs:{video:["6",0],filename_prefix:prefix,format:"auto",codec:"auto"}}
 }; }
 async function submitToComfy(job) { const response=await fetch(comfyUrl+"/prompt",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_id:"ai-movie-studio",prompt:comfyGraph(job)})}); const result=await response.json(); if(!response.ok || result.error) throw new Error(result.error?.message||result.error||"ComfyUI rejected the H3 graph"); return result; }
+async function syncComfyStatus(job) { if(!job.comfyPromptId) return job; const response=await fetch(comfyUrl+"/history/"+encodeURIComponent(job.comfyPromptId)); const history=await response.json(),record=history[job.comfyPromptId]; if(!record) return job; const output=Object.values(record.outputs||{}).flatMap(x=>x.images||[])[0]; job.comfyStatus=record.status?.status_str||"unknown"; if(record.status?.completed&&output){job.connectorStatus="ComfyUI H3 已完成";job.output=output;job.videoUrl=comfyUrl+"/view?filename="+encodeURIComponent(output.filename)+"&subfolder="+encodeURIComponent(output.subfolder||"")+"&type="+encodeURIComponent(output.type||"output");} jobs.set(job.id,job);persistQueue();return job; }
 
 function send(response, status, data) {
   response.writeHead(status, {"Content-Type":"application/json; charset=utf-8", "Access-Control-Allow-Origin":"http://127.0.0.1:4173", "Access-Control-Allow-Methods":"GET,POST,OPTIONS"});
@@ -34,6 +35,8 @@ http.createServer(async (request, response) => {
   if (request.method === "GET" && request.url === "/jobs") return send(response, 200, {jobs:[...jobs.values()]});
   const graphMatch=request.url.match(/^\/jobs\/([^/]+)\/graph$/);
   if (request.method === "GET" && graphMatch) { const job=jobs.get(decodeURIComponent(graphMatch[1])); return job ? send(response,200,{ok:true,prompt:comfyGraph(job)}) : send(response,404,{ok:false,error:"Unknown connector job."}); }
+  const statusMatch=request.url.match(/^\/jobs\/([^/]+)\/status$/);
+  if (request.method === "GET" && statusMatch) { const job=jobs.get(decodeURIComponent(statusMatch[1])); if(!job)return send(response,404,{ok:false,error:"Unknown connector job."}); try{return send(response,200,{ok:true,job:await syncComfyStatus(job)})}catch(error){return send(response,502,{ok:false,error:error.message})} }
   const comfyMatch=request.url.match(/^\/jobs\/([^/]+)\/comfy$/);
   if (request.method === "POST" && comfyMatch) { const job=jobs.get(decodeURIComponent(comfyMatch[1])); if(!job) return send(response,404,{ok:false,error:"Unknown connector job."}); try { const result=await submitToComfy(job); job.connectorStatus="已提交 ComfyUI H3"; job.comfyPromptId=result.prompt_id; job.comfyNumber=result.number; job.submittedAt=new Date().toISOString(); jobs.set(job.id,job); persistQueue(); return send(response,202,{ok:true,job}); } catch(error) { job.connectorStatus="ComfyUI 提交失败："+error.message; jobs.set(job.id,job);persistQueue();return send(response,502,{ok:false,error:error.message,job}); } }
   if (request.method === "POST" && request.url === "/jobs") {
