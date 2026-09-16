@@ -109,8 +109,12 @@ function drawWizard(){
  wizardBody.innerHTML=b;wizardNext.textContent=WSTEP===5?"创建项目并生成制作计划":"下一步 →";
  [["wname","name"],["wuniverse","universe"],["wtarget","target"],["wepisodes","episodes"],["wlogline","logline"],["wsynopsis","synopsis"],["wtheme","theme"],["wgenre","genre"],["waudience","audience"],["wemotion","emotion"],["wending","ending"],["wrt","realityTech"],["wretry","retries"],["wcandidates","candidates"]].forEach(x=>val(x[0],x[1]));
  [["wtype","type"],["wpriority","priority"],["waspect","aspect"],["wres","resolution"],["wfps","fps"],["wstyle","style"],["wavg","avgShot"],["wmodel","model"]].forEach(x=>{let e=document.getElementById(x[0]);if(e){e.value=W[x[1]];e.onchange=()=>{W[x[1]]=e.value;drawPreview()}}});
- if(WSTEP===1)enhanceStoryWizard();drawPreview();
+ if(WSTEP===0)enhanceBasicWizard();if(WSTEP===1)enhanceStoryWizard();drawPreview();
 }
+function savedProjectOptions(key){try{return JSON.parse(localStorage.getItem("aimovie_"+key)||"[]")}catch{return[]}}
+function rememberProjectOptions(){let save=(key,value)=>{let values=savedProjectOptions(key);if(value&&!values.includes(value)){values.unshift(value);localStorage.setItem("aimovie_"+key,JSON.stringify(values.slice(0,20)))}};save("project_types",W.type);save("project_universes",W.universe)}
+function optionList(id,values){return `<datalist id="${id}">${values.map(value=>`<option value="${esc(value)}">`).join("")}</datalist>`}
+function enhanceBasicWizard(){let universe=document.getElementById("wuniverse"),type=document.getElementById("wtype"),types=["旗舰作品","系列故事","短篇实验","连续剧",...savedProjectOptions("project_types")],universes=["独立世界观",...savedProjectOptions("project_universes")];if(universe){universe.setAttribute("list","projectUniverseOptions");universe.insertAdjacentHTML("afterend",optionList("projectUniverseOptions",[...new Set(universes)]))}if(type){type.outerHTML=`<input id="wtype" list="projectTypeOptions" value="${esc(W.type)}">${optionList("projectTypeOptions",[...new Set(types)])}`;let input=document.getElementById("wtype");input.oninput=()=>{W.type=input.value;drawPreview()}}}
 function toggleWizardChoice(key,value){let choices=String(W[key]||"").split(" / ").filter(Boolean),index=choices.indexOf(value);if(index>=0)choices.splice(index,1);else choices.push(value);W[key]=choices.join(" / ");let field=document.getElementById({genre:"wgenre",audience:"waudience",emotion:"wemotion",ending:"wending"}[key]);if(field)field.value=W[key];drawPreview()}
 function openStoryPicker(key){document.querySelectorAll(".storyPicker").forEach(p=>p.classList.remove("show"));document.getElementById("picker_"+key)?.classList.add("show")}
 function closeStoryPicker(key){document.getElementById("picker_"+key)?.classList.remove("show")}
@@ -121,7 +125,7 @@ function drawPreview(){let contribution=(Number(W.target||0)/300*100).toFixed(1)
 function wizardNext(){if(WSTEP===0&&!W.name.trim())return alert("请填写项目名称");if(WSTEP<5){WSTEP++;drawWizard();return}createFromWizard()}
 function wizardBack(){if(WSTEP>0){WSTEP--;drawWizard()}else wizard.classList.add("hidden")}
 function saveDraft(){localStorage.setItem("aimovie_wizard_draft",JSON.stringify(W));alert("项目草稿已保存在本机浏览器。")}
-function createFromWizard(){let id="AMS-"+String(D.projects.length+1).padStart(3,"0");D.projects.push({id,name:W.name,universe:W.universe,type:W.type,target:Number(W.target),status:"策划中",created:new Date().toLocaleDateString(),wizard:JSON.parse(JSON.stringify(W))});D.activeProjectId=id;persist();wizard.classList.add("hidden");alert("项目已创建："+W.name);render();openCockpit(id)}
+function createFromWizard(){rememberProjectOptions();let id="AMS-"+String(D.projects.length+1).padStart(3,"0");D.projects.push({id,name:W.name,universe:W.universe,type:W.type,target:Number(W.target),status:"策划中",created:new Date().toLocaleDateString(),wizard:JSON.parse(JSON.stringify(W))});D.activeProjectId=id;persist();wizard.classList.add("hidden");alert("项目已创建："+W.name);render();openCockpit(id)}
 function switchProject(id){D.activeProjectId=id;persist();render()}
 function deleteProject(id){
  if(D.projects.length<=1)return alert("至少保留一个项目");
