@@ -11,10 +11,10 @@
 <button onclick="go('studio')">🏠 Studio</button>
 <button onclick="go('projects')">🎬 项目管理</button>
 <button onclick="go('stories')">💡 故事</button>
-<button onclick="go('scripts')">✍️ 剧本</button>
 <button onclick="go('characters')">🎭 角色</button>
 <button onclick="go('scenes')">🏙 场景</button>
 <button onclick="go('propsdb')">🎒 道具</button>
+<button onclick="go('scripts')">✍️ 剧本</button>
 <button onclick="go('shots')">🎞 分镜</button>
 <button onclick="go('gen')">⚡ AI生成</button>
 <button onclick="go('review')">👁 审片室</button>
@@ -35,10 +35,10 @@
 <div class="card"><h3>⚡ Render Nodes</h3><div class="queueItem"><span class="statusDot"></span><b>NODE_01</b><p class="muted">RTX Pro 4000 · 24GB VRAM</p><p id="nodeStatus">等待本地 Connector</p></div><div class="queueItem muted">NODE_02 · 未来扩展</div></div>
 <div class="card"><h3>👁 待处理</h3><div class="minirow"><span>待审核镜头</span><b id="reviewCount">0</b></div><div class="minirow"><span>等待生成</span><b id="queueCount">0</b></div><div class="minirow"><span>需重做</span><b id="redoCount">0</b></div><div class="minirow"><span>MASTER</span><b id="masterCount">0</b></div></div>
 </div></div>
-<div class="card"><h3>工作室生产链</h3><b>💡故事 → ✍️剧本 → 🎭角色 / 🏙场景 → 🎞分镜 → ⚡AI生成 → 👁审片 → 🎙声音 → ✂️Premiere → 📦4K成片 → 📊数据</b></div>
+<div class="card"><h3>工作室生产链</h3><b>💡故事 → 🎭角色 / 🏙场景 / 🎒道具 → ✍️剧本 → 🎞分镜 → ⚡AI生成 → 👁审片 → 🎙声音 → ✂️Premiere → 📦4K成片 → 📊数据</b></div>
 </section>
 <section id="cockpit" class="page"><div style="display:flex;justify-content:space-between;align-items:end"><div><p class="muted">项目驾驶舱</p><h1 id="cockpitTitle">项目</h1><p class="muted" id="cockpitMeta"></p></div><button class="btn" onclick="go('studio')">← 返回 Studio</button></div>
-<div class="cockpitTabs"><button onclick="cockpitJump('bible')">📖 项目圣经</button><button onclick="go('scripts')">✍️ 剧本</button><button onclick="go('characters')">🎭 角色</button><button onclick="go('scenes')">🏙 场景</button><button onclick="cockpitJump('props')">🎒 道具</button><button onclick="go('shots')">🎞 分镜</button><button onclick="go('gen')">⚡ AI生成</button><button onclick="go('review')">👁 审片</button><button onclick="go('audio')">🎙 声音</button><button onclick="go('edit')">✂️ 剪辑</button><button onclick="go('masters')">📦 成片</button><button onclick="go('data')">📊 数据</button></div>
+<div class="cockpitTabs"><button onclick="cockpitJump('bible')">📖 项目圣经</button><button onclick="go('characters')">🎭 角色</button><button onclick="go('scenes')">🏙 场景</button><button onclick="cockpitJump('props')">🎒 道具</button><button onclick="go('scripts')">✍️ 剧本</button><button onclick="go('shots')">🎞 分镜</button><button onclick="go('gen')">⚡ AI生成</button><button onclick="go('review')">👁 审片</button><button onclick="go('audio')">🎙 声音</button><button onclick="go('edit')">✂️ 剪辑</button><button onclick="go('masters')">📦 成片</button><button onclick="go('data')">📊 数据</button></div>
 <div class="cockpitHero"><div><div class="card"><h3>制作进度</h3><div class="bigstat" id="cpProgress"></div><div class="bar"><i id="cpBar"></i></div><div class="cockpitGrid" id="cpKpis"></div></div><div class="card"><h3>当前制作阶段</h3><div id="cpPhases"></div></div></div>
 <div><div class="card"><h3>今日应该处理</h3><div id="cpTodo"></div></div><div class="card"><h3>生产节点</h3><b>NODE_01</b><p class="muted">RTX Pro 4000 · 24GB</p><p>等待 Local Connector</p></div></div></div>
 <div class="card" id="bible"><h3>📖 项目圣经</h3><div id="cpBible"></div></div><div class="card" id="props"><h3>🎒 核心道具</h3><div id="cpProps"></div></div></section><section id="stories" class="page"><h1>故事库</h1><p class="muted">灵感、社会新闻、原创故事、小说/IP与待开发故事统一进入这里。</p>
