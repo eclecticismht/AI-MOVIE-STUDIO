@@ -178,6 +178,7 @@ function uid(prefix){return prefix+"_"+Date.now().toString(36)+Math.random().toS
 function upgrade(){
  D.projects.forEach(p=>{p.bible=p.bible||{logline:p.wizard?.logline||"",synopsis:p.wizard?.synopsis||"",theme:p.wizard?.theme||"",genre:p.wizard?.genre||"",style:p.wizard?.style||"写实电影感"};});
  ["scripts","characters","scenes","props","generations","reviews","masters","audio","exports"].forEach(k=>D[k]=Array.isArray(D[k])?D[k]:[]);
+ D.masters.forEach(master=>["对白","音乐","音效"].forEach(type=>{if(!D.audio.some(task=>task.projectId===master.projectId&&task.shot===master.shot&&task.type===type))D.audio.push({id:uid("AUD"),projectId:master.projectId,shot:master.shot,name:master.shot+" · "+type,type,status:"待制作"})}));
  D.connector=D.connector||{endpoint:"http://127.0.0.1:8080",status:"未连接",lastCheck:"—"}; D.production=D.production||{goalMinutes:300,days:90,startDate:new Date().toISOString().slice(0,10)};
  localStorage.setItem("aimovie_data",JSON.stringify(D));
 }
