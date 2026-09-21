@@ -44,7 +44,7 @@ function validatePlan(input){
       if(identity(s.references)!==identity(input.shots[index-1].references))throw Error('承接镜头的参考资产或图片已改变，请使用独立镜头生成新画面');
     }
     if(s.sourceFingerprint!==undefined&&!/^[a-f0-9]{64}$/.test(s.sourceFingerprint))throw Error('来源校验信息无效');
-    return {cropBottomPercent:Framing.validateBottomCrop(s.cropBottomPercent),...(s.sourceFingerprint?{sourceFingerprint:s.sourceFingerprint}:{}),...(s.continueFromShotId?{continueFromShotId:s.continueFromShotId}:{}),firstFrame:validateFirstFrame(s.firstFrame),...(s.audioMode==='replacement'?{audioAsset:(resolveAudioAsset(s.audioAsset),s.audioAsset)}:{}),audioMode:ShotAudio.validate(s.audioMode,dialogueEvents,s.audioAsset),...(s.renderMode==='black'?{renderMode:'black'}:{}),...(screen?{renderMode:'screen',...screen}:{}),screenCards:ScreenCards.validate(s.screenCards||[],s.sourceExcerpt),sourceExcerpt:typeof s.sourceExcerpt==='string'?s.sourceExcerpt.slice(0,30000):'',...(dialogueEvents?{dialogueEvents}:{}),references:validateReferences(s.references),shotId:s.shotId,sequence:index+1,prompt:s.prompt,duration:s.duration,width:s.width,height:s.height,subtitle:typeof s.subtitle==='string'?s.subtitle.slice(0,5000):''};
+    return {faceRefineMode:require('./face-refine').mode(s.faceRefineMode),cropBottomPercent:Framing.validateBottomCrop(s.cropBottomPercent),...(s.sourceFingerprint?{sourceFingerprint:s.sourceFingerprint}:{}),...(s.continueFromShotId?{continueFromShotId:s.continueFromShotId}:{}),firstFrame:validateFirstFrame(s.firstFrame),...(s.audioMode==='replacement'?{audioAsset:(resolveAudioAsset(s.audioAsset),s.audioAsset)}:{}),audioMode:ShotAudio.validate(s.audioMode,dialogueEvents,s.audioAsset),...(s.renderMode==='black'?{renderMode:'black'}:{}),...(screen?{renderMode:'screen',...screen}:{}),screenCards:ScreenCards.validate(s.screenCards||[],s.sourceExcerpt),sourceExcerpt:typeof s.sourceExcerpt==='string'?s.sourceExcerpt.slice(0,30000):'',...(dialogueEvents?{dialogueEvents}:{}),references:validateReferences(s.references),shotId:s.shotId,sequence:index+1,prompt:s.prompt,duration:s.duration,width:s.width,height:s.height,subtitle:typeof s.subtitle==='string'?s.subtitle.slice(0,5000):''};
   });
   return {projectId:input.projectId,title:input.title.slice(0,120),shots};
 }
@@ -111,13 +111,13 @@ async function work(run){
         firstFrame=await uploadReference('data:image/png;base64,'+fs.readFileSync(framePath).toString('base64'),'http://127.0.0.1:8188',fetch);
         shot.continuityFrame={...firstFrame,fromShotId:previous.shotId,fromJobId:previous.jobId};save(run);
       }
-      await connector('/jobs',{id:jobId,projectId:run.projectId,shot:shot.shotId,prompt:shot.prompt,firstFrame,references:shot.references,dialogueEvents:shot.dialogueEvents,duration:shot.duration,width:shot.width,height:shot.height,model:'Minimax H3',candidates:1});
+      await connector('/jobs',{id:jobId,projectId:run.projectId,shot:shot.shotId,prompt:shot.prompt,faceRefineMode:shot.faceRefineMode,firstFrame,references:shot.references,dialogueEvents:shot.dialogueEvents,duration:shot.duration,width:shot.width,height:shot.height,model:'Minimax H3',candidates:1});
       await connector('/jobs/'+jobId+'/comfy',{});
       let job;
       for(;;){
         job=(await connector('/jobs/'+jobId+'/status')).job;
         run.current={index:i+1,shotId:shot.shotId,stage:job.connectorStatus,progress:job.progress};save(run);
-        if(job.videoUrl)break;
+        if(job.videoUrl){shot.faceRefine=job.faceRefine;shot.originalVideoUrl=job.originalVideoUrl;break;}
         if(/失败|已取消|未找到视频/.test(job.connectorStatus||'')){shot.renderAttempt=(shot.renderAttempt||0)+1;save(run);throw Error(`第 ${i+1} 镜：${job.connectorStatus}`)}
         await sleep(4000);
       }

@@ -62,7 +62,7 @@ async function startAutomaticFilm(sample=false,prepareOnly=false){
       filmMessage=`正在自动编写视频提示词：${i+1}–${Math.min(i+6,plan.shots.length)} / ${plan.shots.length}`;renderEdit();
       const batch=plan.shots.slice(i,i+6),needed=batch.filter(s=>{if(['black','screen'].includes(s.renderMode))return false;const original=shots.find(x=>x.id===s.shotId);if(ShotPrompt.isStructured(original.prompt))return false;return original.filmPromptVersion!==2||!original.filmPrompt||original.filmPromptSource!==s.prompt});
       if(needed.length){
-        const r=await fetch('/api/h3-prompts',{method:'POST',headers:{'Content-Type':'application/json',...(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{})},body:JSON.stringify({model:p.screenplayModel||'deepseek-flash',shots:needed.map(s=>({id:s.shotId,duration:s.duration,description:s.prompt,dialogue:s.subtitle}))}),signal:AbortSignal.timeout(250000)}),out=await r.json();
+        const r=await fetch('/api/h3-prompts',{method:'POST',headers:{'Content-Type':'application/json',...(typeof textAIHeaders==='function'?textAIHeaders(p.screenplayModel):(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{}))},body:JSON.stringify({model:p.screenplayModel||'deepseek-flash',shots:needed.map(s=>({id:s.shotId,duration:s.duration,description:s.prompt,dialogue:s.subtitle}))}),signal:AbortSignal.timeout(250000)}),out=await r.json();
         if(!r.ok)throw Error(out.error||'提示词生成失败');
         for(const item of out.prompts){const original=shots.find(s=>s.id===item.id),draft=needed.find(s=>s.shotId===item.id);original.filmPrompt=item.prompt;original.filmPromptVersion=2;original.filmPromptSource=draft.prompt}
         localStorage.setItem('aimovie_data',JSON.stringify(D));

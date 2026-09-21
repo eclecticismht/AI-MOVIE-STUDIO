@@ -81,7 +81,6 @@ function parseScreenplayBundle(content) {
   return {content:data.content.trim(),assets};
 }
 function createScreenplayApi({fetchImpl=fetch, env=process.env}={}) {
-  const base='https://api.deepseek.com';
   const send=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data))};
   async function readBody(req) {
     const raw=await require('./request-body').readUtf8(req,400000,'故事过长，请按章节生成（每次最多 60,000 字）。');
@@ -95,7 +94,7 @@ function createScreenplayApi({fetchImpl=fetch, env=process.env}={}) {
     if(origin && origin!==`http://${req.headers.host}`){send(res,403,{error:'请从本地工作室页面生成剧本。'});return true}
     try {
       if(req.method==='GET'&&pathname==='/api/screenplay/config') {
-        send(res,200,{configured:!!env.DEEPSEEK_API_KEY,defaultModel:env.SCREENPLAY_MODEL||'deepseek-flash'});return true;
+        send(res,200,{configured:!!env.DEEPSEEK_API_KEY,openaiConfigured:!!env.OPENAI_API_KEY,defaultModel:env.SCREENPLAY_MODEL||'deepseek-flash'});return true;
       }
       if(req.method!=='POST'||(!storyboard&&!h3&&pathname!=='/api/screenplay')){send(res,404,{error:'接口不存在。'});return true}
       const input=await readBody(req);
@@ -104,9 +103,10 @@ function createScreenplayApi({fetchImpl=fetch, env=process.env}={}) {
       if(!input||typeof input.story!=='string'||!input.story.trim()){send(res,400,{error:'请先粘贴故事原文。'});return true}
       if(input.story.length>60000){send(res,400,{error:'故事超过 60,000 字，请按章节生成。'});return true}
       const model=(typeof input.model==='string'&&input.model.trim())||env.SCREENPLAY_MODEL||'deepseek-flash';
-      const apiKey=(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim()||env.DEEPSEEK_API_KEY;
-      if(!apiKey){send(res,401,{error:'请在 DeepSeek 连接中填写 API Key。'});return true}
-      if(!/^deepseek-[a-zA-Z0-9._-]+$/.test(model)){send(res,400,{error:'DeepSeek 模型名称不正确。'});return true}
+      const openai=model.startsWith('gpt-'),provider=openai?'OpenAI':'DeepSeek',base=openai?'https://api.openai.com/v1':'https://api.deepseek.com';
+      const apiKey=(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim()||(openai?env.OPENAI_API_KEY:env.DEEPSEEK_API_KEY);
+      if(!apiKey){send(res,401,{error:`请在 AI 模型设置中填写 ${provider} API Key。`});return true}
+      if(!/^(?:deepseek|gpt)-[a-zA-Z0-9._-]+$/.test(model)){send(res,400,{error:'文字模型名称不正确，请选择 DeepSeek 或 GPT 模型。'});return true}
       const notes=typeof input.notes==='string'?input.notes.slice(0,3000):'';
       const timing=input.timing||{mode:'auto'};
       if(storyboard&&(!['auto','target'].includes(timing.mode)||(timing.mode==='target'&&(!Number.isFinite(timing.targetSeconds)||timing.targetSeconds<6||timing.targetSeconds>2400))))throw new Error('分镜目标时长无效。');
@@ -127,18 +127,18 @@ function createScreenplayApi({fetchImpl=fetch, env=process.env}={}) {
       const repair=storyboard&&input.repair&&typeof input.repair.content==='string'&&input.repair.content.length<=100000&&typeof input.repair.error==='string'?input.repair:null;
       const response=await fetchImpl(base+'/chat/completions',{
         method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+apiKey},signal:AbortSignal.timeout(240000),
-        body:JSON.stringify({model,stream:false,max_tokens:16000,thinking:{type:'disabled'},...(storyboard||withAssets||h3?{response_format:{type:'json_object'}}:{}),messages:[{role:'system',content:h3?H3_PROMPT:storyboard?STORYBOARD_PROMPT+assetInstructions+timingInstructions:SYSTEM_PROMPT+(withAssets?'\n返回格式调整如下：\n'+ASSET_PROMPT:'')},{role:'user',content:JSON.stringify(h3?{shots:h3Shots}:storyboard?{剧本正文:input.story,分镜要求:notes,...(assets?{项目资产:assets}:{})}:{故事原文:input.story,改编要求:notes})},...(repair?[{role:'assistant',content:repair.content},{role:'user',content:'上一次JSON未通过校验：'+repair.error.slice(0,12000)+'。请基于上面的原结果修正，不遗漏已有镜头；重新返回本段完整JSON。'}]:[])]})
+        body:JSON.stringify({model,stream:false,...(openai?{max_completion_tokens:16000}:{max_tokens:16000,thinking:{type:'disabled'}}),...(storyboard||withAssets||h3?{response_format:{type:'json_object'}}:{}),messages:[{role:'system',content:h3?H3_PROMPT:storyboard?STORYBOARD_PROMPT+assetInstructions+timingInstructions:SYSTEM_PROMPT+(withAssets?'\n返回格式调整如下：\n'+ASSET_PROMPT:'')},{role:'user',content:JSON.stringify(h3?{shots:h3Shots}:storyboard?{剧本正文:input.story,分镜要求:notes,...(assets?{项目资产:assets}:{})}:{故事原文:input.story,改编要求:notes})},...(repair?[{role:'assistant',content:repair.content},{role:'user',content:'上一次JSON未通过校验：'+repair.error.slice(0,12000)+'。请基于上面的原结果修正，不遗漏已有镜头；重新返回本段完整JSON。'}]:[])]})
       });
-      if(!response.ok){const errors={401:'DeepSeek API Key 无效，请检查密钥。',402:'DeepSeek API 余额不足，请检查账户。',429:'DeepSeek 请求过于频繁，请稍后重试。'};throw new Error(errors[response.status]||`DeepSeek 暂时无法生成剧本（${response.status}），请稍后重试。`)}
+      if(!response.ok){const errors={401:provider+' API Key 无效，请检查密钥。',402:provider+' API 余额不足，请检查账户。',429:provider+' 请求额度不足或过于频繁，请检查账户后重试。',404:provider+' 模型不存在或当前账户无权使用，请更换模型。'};throw new Error(errors[response.status]||`文字模型暂时无法生成剧本（${response.status}），请稍后重试。`)}
       const result=await response.json(),choice=result.choices?.[0],content=choice?.message?.content;
       if(choice?.finish_reason==='length')throw new Error('模型输出达到长度上限，剧本尚未完整生成。请缩短原文或按章节生成。');
-      if(choice?.finish_reason!=='stop')throw new Error('DeepSeek 未完整完成剧本，请稍后重试。');
+      if(choice?.finish_reason!=='stop')throw new Error('文字模型未完整完成剧本，请稍后重试。');
       if(typeof content!=='string'||!content.trim())throw new Error('文字模型未返回剧本，请重试或更换模型。');
       if(h3){const prompts=require('./h3-prompt-response').parseResponse(content,h3Shots).map(item=>({...item,id:input.shots[h3Shots.findIndex(s=>s.id===item.id)].id}));send(res,200,{prompts,model})}
       else if(storyboard){try{send(res,200,{shots:parseStoryboard(content,input.story,assets),model})}catch(error){send(res,422,{error:error.message,repair:{content,error:error.message}})}}
       else send(res,200,withAssets?{...parseScreenplayBundle(content),model}:{content:content.trim(),model});
     } catch(error) {
-      const message=/timeout|abort/i.test(error.name)?'生成超时，原文和已有剧本均已保留。请缩短原文或更换模型。':error.message==='fetch failed'?'无法连接 DeepSeek，请检查网络后重试。':error.message;
+      const message=/timeout|abort/i.test(error.name)?'生成超时，原文和已有剧本均已保留。请缩短原文或更换模型。':error.message==='fetch failed'?'无法连接文字模型服务，请检查网络后重试。':error.message;
       send(res,502,{error:message});
     }
     return true;

@@ -31,12 +31,12 @@ async function storyFlowStart(resume=true){
     let state=resume&&p.storyFlow?.story===story?{...p.storyFlow}:{story,stage:'screenplay'};
     storyFlowCommit(p,{storyFlow:state});renderScripts();
     let script=D.scripts.find(s=>s.projectId===p.id&&s.id===state.scriptId);
-    if(!script){storyFlowNotice(p,'1 / 3 · DeepSeek 正在改编剧本并整理资产…');script=await generateScreenplay();if(!script)throw Error(screenplayMessages.get(p.id)||'剧本未完成，请重试。');state={...state,scriptId:script.id,stage:'storyboard'};storyFlowCommit(p,{storyFlow:state});}
+    if(!script){storyFlowNotice(p,'1 / 3 · 所选模型正在改编剧本并整理资产…');script=await generateScreenplay();if(!script)throw Error(screenplayMessages.get(p.id)||'剧本未完成，请重试。');state={...state,scriptId:script.id,stage:'storyboard'};storyFlowCommit(p,{storyFlow:state});}
     storyFlowCheckpoint(p,run);
     let batch=(D.storyboardBatches||[]).find(b=>b.projectId===p.id&&b.id===state.batchId&&b.sourceContent===script.content);
     if(!batch){
       storyFlowCommit(p,{screenplayId:script.id,storyboardScriptId:script.id});const content=script.content;
-      storyFlowNotice(p,'2 / 3 · DeepSeek 正在按场景拆分镜头…');batch=await generateStoryboard();if(!batch)throw Error(storyboardMessages.get(p.id)||'分镜未完成，请重试。');
+      storyFlowNotice(p,'2 / 3 · 所选模型正在按场景拆分镜头…');batch=await generateStoryboard();if(!batch)throw Error(storyboardMessages.get(p.id)||'分镜未完成，请重试。');
       state={...state,batchId:batch.id,stage:'prompts'};storyFlowCommit(p,{storyFlow:state});
       if(script.content!==content)throw Error('生成期间剧本已修改。本次分镜已保留，继续时会按最新剧本新建分镜批次。');
     }
@@ -52,8 +52,8 @@ async function storyFlowStart(resume=true){
 async function storyFlowPrompts(p,shots,run){
   for(let i=0;i<shots.length;i+=6){
     storyFlowCheckpoint(p,run);const chunk=shots.slice(i,i+6),snapshots=chunk.map(s=>JSON.stringify(s));
-    storyFlowNotice(p,`3 / 3 · DeepSeek 正在生成 H3 提示词 ${i+1}–${Math.min(i+6,shots.length)} / ${shots.length}…`);
-    const response=await fetch('/api/h3-prompts',{method:'POST',headers:{'Content-Type':'application/json',...(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{})},body:JSON.stringify({model:p.screenplayModel||'deepseek-flash',shots:chunk.map(s=>({id:s.id,duration:Number(s.dur),description:compileH3Prompt({...s,prompt:''}),dialogue:s.dialogue||''}))}),signal:AbortSignal.timeout(250000)});
+    storyFlowNotice(p,`3 / 3 · 所选模型正在生成 H3 提示词 ${i+1}–${Math.min(i+6,shots.length)} / ${shots.length}…`);
+    const response=await fetch('/api/h3-prompts',{method:'POST',headers:{'Content-Type':'application/json',...(typeof textAIHeaders==='function'?textAIHeaders(p.screenplayModel):(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{}))},body:JSON.stringify({model:p.screenplayModel||'deepseek-flash',shots:chunk.map(s=>({id:s.id,duration:Number(s.dur),description:compileH3Prompt({...s,prompt:''}),dialogue:s.dialogue||''}))}),signal:AbortSignal.timeout(250000)});
     const out=await response.json();if(!response.ok)throw Error(out.error||'H3 提示词生成失败');
     if(!Array.isArray(out.prompts)||out.prompts.length!==chunk.length||new Set(out.prompts.map(x=>x.id)).size!==chunk.length||out.prompts.some(x=>!chunk.some(s=>s.id===x.id)||!ShotPrompt.isStructured(x.prompt)||/<d\b/i.test(x.prompt)))throw Error('H3 提示词返回不完整，请重试。');
     if(chunk.some((s,j)=>!D.shots.includes(s)||JSON.stringify(s)!==snapshots[j]))throw Error('生成期间镜头被修改，本组提示词未覆盖，请重试。');

@@ -212,3 +212,11 @@
 - result-guard.js / review-explanation-ui.js: 采用版本按钮取代 MASTER 术语，区分无视频、旧记录缺少来源、源分镜/资产变更等情况。
 - 验证：255 项测试通过；包含真实文档提取、HTTP 上传及模拟 DeepSeek 全流程/失败续接；实际页面确认 3 场 10 镜与多图入口。本轮未向 DeepSeek 实际提交用户故事。
 - 服务已重启启用上传接口，本地服务器 PID 342792；重启前确认没有活动成片任务。现有暂停任务未恢复。
+
+## 2026-09-22 — OpenAI 官方 GPT 与自动 Face Refine
+- 剧本、分镜、H3 提示词共用模型选择：DeepSeek 与 gpt-5.4、gpt-5.4-mini、gpt-5.4-nano、gpt-5-mini，支持自定义 GPT 名称。GPT 固定访问 https://api.openai.com/v1/chat/completions，使用独立 OPENAI_API_KEY 或当前会话输入；不复用 DeepSeek 密钥，不发送 DeepSeek thinking 参数。
+- 官方参考：https://developers.openai.com/api/docs/models/gpt-5.4-mini 、 https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create 。API 账户可用性由服务端返回确认，预置选项不是账户权限保证。
+- 新任务默认自动人脸精修，旧任务无选项时继续关闭。生成后 CPU YOLO 抽检 5 帧：唯一现场角色参考、稳定单人脸，多数帧脸宽高较小边 <96px 或 Laplacian 方差 <60 时精修；多人、背影和未检测到人脸时跳过。可在分镜检查面板全局切换自动/开启/关闭。
+- Connector 后台继续检测与提交精修，保存原视频地址；完整长度、原声连接、每帧降噪及单独输出已接入。失败回退原视频；未知提交状态不重复提交。审片可看原视频链接和精修原因，未自动批准。
+- 可配置 COMFY_ROOT / FACE_REFINE_PYTHON；默认使用当前 ComfyUI 安装的 Python 和 face_yolov8m.pt。YOLO 配置写 .runtime 内。
+- 验证：262 项自动测试通过；真实测试片检测到 34px 人脸；当前 ComfyUI 20 个节点和参数枚举校验通过；GPT 路由与密钥隔离、精修状态机使用模拟接口测试，未执行新的完整 GPU 精修或实调 GPT。

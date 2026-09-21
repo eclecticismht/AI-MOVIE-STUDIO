@@ -99,7 +99,7 @@ async function generateScreenplay() {
   if(!model){screenplayMessages.set(p.id,'请填写 DeepSeek 模型名称。');renderScripts();return}
   screenplayRequests.add(p.id);screenplayMessages.set(p.id,'正在生成剧本并整理角色、场景、道具，请稍候…');renderScripts();
   try {
-    const response=await fetch('/api/screenplay',{method:'POST',headers:{'Content-Type':'application/json',...(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{})},body:JSON.stringify({story,notes,model,includeAssets:true}),signal:AbortSignal.timeout(250000)});
+    const response=await fetch('/api/screenplay',{method:'POST',headers:{'Content-Type':'application/json',...(typeof textAIHeaders==='function'?textAIHeaders(model):(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{}))},body:JSON.stringify({story,notes,model,includeAssets:true}),signal:AbortSignal.timeout(250000)});
     if(!(response.headers.get('content-type')||'').includes('application/json'))throw new Error('剧本服务尚未启动，请重启本地服务器。');
     const result=await response.json();if(!response.ok)throw new Error(result.error||'剧本生成失败，请重试。');
     if(typeof result.content!=='string'||!result.content.trim())throw new Error('没有收到剧本正文，请重试。');

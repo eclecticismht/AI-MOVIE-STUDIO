@@ -72,7 +72,10 @@ async function submitToComfy(job) {
   if(typeof result.prompt_id!=="string" || !result.prompt_id) throw new Error("ComfyUI did not return a prompt id");
   return result;
 }
-async function syncComfyStatus(job) {
+const statusSyncs=new Map();
+function syncComfyStatus(job){if(statusSyncs.has(job.id))return statusSyncs.get(job.id);const task=readComfyStatus(job).finally(()=>statusSyncs.delete(job.id));statusSyncs.set(job.id,task);return task}
+async function readComfyStatus(job) {
+  if(job.originalVideoUrl){require('./face-refine').processResult(job,{request:comfyRequest,persist:persistQueue,comfyUrl});return job;}
   if(!job.comfyPromptId || job.cancelledAt) return job;
   const history=await comfyRequest("/history/"+encodeURIComponent(job.comfyPromptId)),record=history[job.comfyPromptId];
   if(!record) {
@@ -96,8 +99,14 @@ async function syncComfyStatus(job) {
     job.connectorStatus="ComfyUI H3 已完成";job.output=output;
     job.completedAt=job.completedAt||new Date().toISOString();
     job.videoUrl=comfyUrl+"/view?filename="+encodeURIComponent(output.filename)+"&subfolder="+encodeURIComponent(output.subfolder||"")+"&type="+encodeURIComponent(output.type||"output");
+    if(job.faceRefineMode&&job.faceRefineMode!=='off')require('./face-refine').processResult(job,{request:comfyRequest,persist:persistQueue,comfyUrl});
   } else if(record.status?.completed) job.connectorStatus="ComfyUI 已结束，未找到视频输出";
   jobs.set(job.id,job);persistQueue();return job;
+}
+// Continue opted-in post-processing even when the user leaves the queue page.
+if(typeof setInterval==='function'){
+ let checkingFaces=false;
+ setInterval(async()=>{if(checkingFaces)return;checkingFaces=true;try{for(const job of jobs.values())if(job.comfyPromptId&&!job.cancelledAt&&job.faceRefineMode&&job.faceRefineMode!=='off'&&!job.videoUrl&&!['error'].includes(job.comfyStatus)){try{await syncComfyStatus(job)}catch{}}}finally{checkingFaces=false}},5000).unref();
 }
 
 function send(response, status, data) {
@@ -124,7 +133,7 @@ http.createServer(async (request, response) => {
   const comfyMatch=request.url.match(/^\/jobs\/([^/]+)\/comfy$/);
   if (request.method === "POST" && comfyMatch) { const job=jobs.get(decodeURIComponent(comfyMatch[1])); if(!job) return send(response,404,{ok:false,error:"Unknown connector job."}); if(job.cancelledAt)return send(response,409,{ok:false,error:"已取消的任务不能重新提交，请创建新任务。"}); if(job.comfyPromptId)return send(response,200,{ok:true,job}); if(submitting.has(job.id))return send(response,409,{ok:false,error:"任务正在提交，请稍后同步状态。"}); submitting.add(job.id); try { const result=await submitToComfy(job); job.connectorStatus="已提交 ComfyUI H3"; job.comfyPromptId=result.prompt_id; job.comfyNumber=result.number; job.submittedAt=new Date().toISOString(); jobs.set(job.id,job); persistQueue(); return send(response,202,{ok:true,job}); } catch(error) { job.connectorStatus="ComfyUI 提交失败："+error.message; jobs.set(job.id,job);persistQueue();return send(response,502,{ok:false,error:error.message,job}); } finally { submitting.delete(job.id); } }
   if (request.method === "POST" && request.url === "/jobs") {
-    try { const job = await body(request); if (!job || typeof job.id!=="string" || !job.id.trim() || typeof job.prompt!=="string" || !job.prompt.trim()) return send(response, 400, {ok:false,error:"Job id and H3 prompt are required."}); const prior=jobs.get(job.id); if(prior)return send(response,200,{ok:true,job:prior}); const dimensions=renderDimensions(job),references=validateReferences(job.references),firstFrame=validateFirstFrame(job.firstFrame); if(job.mode==='I2VA'&&!firstFrame)throw Error('H3 首帧模式缺少图片'); const dialogueEvents=job.dialogueEvents?DialogueContract.validateEvents(job.dialogueEvents):undefined;if(firstFrame&&dialogueEvents?.some(e=>e.type==='speech'&&e.delivery==='onscreen')&&!firstFrame.speakerPosition)throw Error('H3 首帧镜头请指定画内发声者在画面中的位置');if(dialogueEvents)DialogueContract.bindDialogue(job.prompt,dialogueEvents,job.duration,references); if(job.mode==='Ref2VA'&&!references.length)throw Error('H3 参考图模式缺少图片'); const {id,prompt,shot,projectId,model,mode,duration,candidates}=job,accepted={id,prompt,shot,projectId,model,mode,duration,candidates,references,...(firstFrame?{firstFrame}:{}),...(dialogueEvents?{dialogueEvents}:{}),...dimensions,mode:firstFrame?'I2VA':references.length?'Ref2VA':mode,connectorStatus:"已接收，等待 H3 Worker",receivedAt:prior?.receivedAt||new Date().toISOString(),retries:prior?.retries||0}; jobs.set(job.id, accepted); persistQueue(); return send(response, 202, {ok:true,job:accepted}); }
+    try { const job = await body(request); if (!job || typeof job.id!=="string" || !job.id.trim() || typeof job.prompt!=="string" || !job.prompt.trim()) return send(response, 400, {ok:false,error:"Job id and H3 prompt are required."}); const prior=jobs.get(job.id); if(prior)return send(response,200,{ok:true,job:prior}); const dimensions=renderDimensions(job),references=validateReferences(job.references),firstFrame=validateFirstFrame(job.firstFrame); if(job.mode==='I2VA'&&!firstFrame)throw Error('H3 首帧模式缺少图片'); const dialogueEvents=job.dialogueEvents?DialogueContract.validateEvents(job.dialogueEvents):undefined;if(firstFrame&&dialogueEvents?.some(e=>e.type==='speech'&&e.delivery==='onscreen')&&!firstFrame.speakerPosition)throw Error('H3 首帧镜头请指定画内发声者在画面中的位置');if(dialogueEvents)DialogueContract.bindDialogue(job.prompt,dialogueEvents,job.duration,references); if(job.mode==='Ref2VA'&&!references.length)throw Error('H3 参考图模式缺少图片'); const {id,prompt,shot,projectId,model,mode,duration,candidates}=job,accepted={id,prompt,shot,projectId,model,mode,duration,candidates,faceRefineMode:require('./face-refine').mode(job.faceRefineMode),references,...(firstFrame?{firstFrame}:{}),...(dialogueEvents?{dialogueEvents}:{}),...dimensions,mode:firstFrame?'I2VA':references.length?'Ref2VA':mode,connectorStatus:"已接收，等待 H3 Worker",receivedAt:prior?.receivedAt||new Date().toISOString(),retries:prior?.retries||0}; jobs.set(job.id, accepted); persistQueue(); return send(response, 202, {ok:true,job:accepted}); }
     catch(error) { return send(response, 400, {ok:false,error:error.message.startsWith("H3 ")?error.message:"Invalid JSON job payload."}); }
   }
   send(response, 404, {ok:false,error:"Unknown connector route."});

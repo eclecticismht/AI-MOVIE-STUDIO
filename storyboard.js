@@ -134,7 +134,7 @@ async function generateStoryboard(){
     for(let attempt=0,repair=draft.repairs?.[partIndex],feedback=repair?'\n请继续修正上次未通过检查的原始结果。':'';attempt<3;attempt++){
       storyboardMessages.set(p.id,`正在生成第 ${partIndex+1}/${segments.length} 段分镜${attempt?`，自动修正第 ${attempt} 次`:''}…`);if(D.activeProjectId===p.id)renderShots2();
       const guidance='\n口头对白时长计算：字数除以3再加1秒，向上取整，最少4秒，最多15秒；超过15秒必须按原文标点拆成多镜，每镜仍逐字保留原句片段和说话人，不得删掉台词。屏幕文字不计入口头对白。';
-      const response=await fetch('/api/storyboard',{method:'POST',headers:{'Content-Type':'application/json',...(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{})},body:JSON.stringify({screenplay:part.text,repair,notes:guidance+(segments.length>1?`\n本次只生成完整剧本第${partIndex+1}/${segments.length}段，不能重复其他段。整片镜头数量要求按本段目标时长比例分配，不要为本段生成整片镜头数量。`:'')+feedback+'\n'+notes,assets,timing:part.timing,model:p.screenplayModel||'deepseek-flash'}),signal:AbortSignal.timeout(250000)});
+      const response=await fetch('/api/storyboard',{method:'POST',headers:{'Content-Type':'application/json',...(typeof textAIHeaders==='function'?textAIHeaders(p.screenplayModel):(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{}))},body:JSON.stringify({screenplay:part.text,repair,notes:guidance+(segments.length>1?`\n本次只生成完整剧本第${partIndex+1}/${segments.length}段，不能重复其他段。整片镜头数量要求按本段目标时长比例分配，不要为本段生成整片镜头数量。`:'')+feedback+'\n'+notes,assets,timing:part.timing,model:p.screenplayModel||'deepseek-flash'}),signal:AbortSignal.timeout(250000)});
       if(!(response.headers.get('content-type')||'').includes('application/json'))throw new Error('分镜接口尚未启动，请重启本地服务器。');
       piece=await response.json();
       if(response.ok)break;

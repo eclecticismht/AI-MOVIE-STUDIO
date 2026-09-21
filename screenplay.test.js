@@ -4,6 +4,11 @@ const {Readable}=require('node:stream');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const {createScreenplayApi}=require('./screenplay-api');
+test('GPT uses official OpenAI endpoint and OpenAI credentials without DeepSeek parameters',async()=>{
+ let upstream;const response=await apiRequest(async(url,options)=>{upstream={url,...options};return completion()},{story:'故事',model:'gpt-5.4-mini'},{},{OPENAI_API_KEY:'openai-test',DEEPSEEK_API_KEY:'deepseek-test'});
+ assert.equal(response.status,200);assert.equal(upstream.url,'https://api.openai.com/v1/chat/completions');assert.equal(upstream.headers.Authorization,'Bearer openai-test');const payload=JSON.parse(upstream.body);assert.equal(payload.max_completion_tokens,16000);assert.equal(payload.max_tokens,undefined);assert.equal(payload.thinking,undefined);
+ const missing=await apiRequest(async()=>{throw Error('must not send DeepSeek key to OpenAI')},{story:'故事',model:'gpt-5.4'},{},{DEEPSEEK_API_KEY:'deepseek-test'});assert.equal(missing.status,401);assert.match(missing.result.error,/OpenAI/);
+});
 
 test('combined generation validates and returns structured assets without mixing them into screenplay',async()=>{
   const bundle={content:'第1场 外景·车站·夜\n父亲等待女儿。',assets:{characters:[{name:'父亲',type:'主角',notes:'等女儿'},{name:' 父亲 ',type:'主角',notes:'别名重复'}],scenes:[],props:[]}};
