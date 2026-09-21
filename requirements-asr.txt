@@ -1,0 +1,5 @@
+# Install into .runtime/asr; keep ComfyUI's global dependencies unchanged.
+faster-whisper==1.2.1
+opencc-python-reimplemented==0.1.7
+
+pypinyin==0.55.0

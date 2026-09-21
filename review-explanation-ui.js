@@ -1,0 +1,2 @@
+const reviewRenderWithExplanation=renderReview;
+renderReview=function(){reviewRenderWithExplanation();for(const button of document.querySelectorAll('#review button[onclick^="approveMaster("]')){const id=button.getAttribute('onclick').match(/approveMaster\('([^']+)'\)/)?.[1];if(!id)continue;const help=document.createElement('button');help.className='btn';help.textContent='检查能否采用';help.onclick=()=>explainReviewResult(id);button.after(help)}};
