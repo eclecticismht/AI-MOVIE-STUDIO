@@ -4,6 +4,7 @@
  const ordered=shots=>shots.filter(s=>!s.autoArchived).slice().sort((a,b)=>(a.sequence||0)-(b.sequence||0));
  function normalize(saved,shots){
   shots=ordered(shots);const ids=new Set(shots.map(s=>s.id)),seen=new Set();
+  if(Array.isArray(saved)&&!saved.length)return [];
   const acts=(saved?.length?saved:[{id:'act-1',title:title(1),content:'',shotIds:shots.map(s=>s.id)}]).map((a,i)=>({...a,title:a.title||title(i+1),content:a.content||'',shotIds:(a.shotIds||[]).filter(id=>{if(!ids.has(id)||seen.has(id))return false;seen.add(id);return true})}));
   acts[0].shotIds.push(...shots.filter(s=>!seen.has(s.id)).map(s=>s.id));return acts;
  }
@@ -20,7 +21,7 @@
    acts[last].shotIds.push(s.id);
   }return acts;
  }
- function remove(acts,id){if(acts.length<=1)throw Error('至少保留一个场次。');const index=acts.findIndex(a=>a.id===id);if(index<0)throw Error('场次不存在');const next=acts.map(a=>({...a,shotIds:[...a.shotIds]})),deleted=next.splice(index,1)[0];next[Math.max(0,index-1)].shotIds.push(...deleted.shotIds);return next}
+ function remove(acts,id){const index=acts.findIndex(a=>a.id===id);if(index<0)throw Error('场次不存在');const next=acts.map(a=>({...a,shotIds:[...a.shotIds]})),deleted=next.splice(index,1)[0];if(next.length)next[Math.max(0,index-1)].shotIds.push(...deleted.shotIds);return next}
  function move(acts,shotId,target){if(!acts.some(a=>a.id===target))throw Error('目标场次不存在');return acts.map(a=>({...a,shotIds:[...a.shotIds.filter(id=>id!==shotId),...(a.id===target?[shotId]:[])]}))}
  const api={normalize,auto,remove,move,title,ordered};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.StoryActs=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
