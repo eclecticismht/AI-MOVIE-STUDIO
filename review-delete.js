@@ -17,7 +17,7 @@ async function masterSourceIsCurrent(master){
  return !!generation&&generation.shot===master.shot&&generation.status==='MASTER'&&await ResultGuard.matches(shot,generation,D);
 }
 const masterApprovalLocks=new Set();
-async function approveCurrentMaster(id){
+async function approveCurrentMaster(id,stay=false){
  if(masterApprovalLocks.has(id))return;masterApprovalLocks.add(id);
  try{
   const g=D.generations.find(x=>x.id===id&&x.projectId===D.activeProjectId);if(!g)return;
@@ -29,7 +29,7 @@ async function approveCurrentMaster(id){
   const shots=D.shots.map(s=>s===shot?{...s,status:'完成'}:s),audio=[...(D.audio||[])];
   for(const type of ['对白','音乐','音效'])if(!audio.some(a=>a.projectId===g.projectId&&a.shot===g.shot&&a.type===type))audio.push({id:uid('AUD'),projectId:g.projectId,shot:g.shot,name:g.shot+' · '+type,type,status:'待制作'});
   localStorage.setItem('aimovie_data',JSON.stringify({...D,generations,masters,shots,audio}));
-  Object.assign(D,{generations,masters,shots,audio});go('masters');
+  Object.assign(D,{generations,masters,shots,audio});if(!stay)go('masters');
  }catch(error){alert('暂不能采用：'+error.message)}finally{masterApprovalLocks.delete(id)}
 }
 async function explainReviewResult(id){const g=D.generations.find(x=>x.id===id&&x.projectId===D.activeProjectId);if(!g)return;const shot=D.shots.find(x=>x.id===g.shot&&x.projectId===g.projectId);try{alert(await ResultGuard.reason(shot,g,D)||'此视频的来源与当前分镜一致。请确认画面、动作、对白和声音满意后，点击“采用此版本”。')}catch{alert('暂时无法核验来源，请稍后重试。')}}

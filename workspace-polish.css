@@ -30,3 +30,12 @@ main select,main input:not([type=checkbox]):not([type=range]):not([type=file]),m
 .story-act .act-delete{float:right;margin-left:12px;color:#ffb7b0;border-color:#704441}.story-act>summary::after{content:"";display:block;clear:both}.story-act .act-delete:hover{background:#432629}
 #timelineResolutionControl{position:relative;white-space:nowrap;font-size:13px}#timelineResolutionControl>summary{cursor:pointer;padding:8px;border:1px solid #394656;border-radius:7px;background:#17202c}#timelineResolutionControl b{font-weight:500;margin-left:6px}.tl-resolution-popover{position:absolute;right:0;top:100%;z-index:30;width:310px;max-width:85vw;white-space:normal;padding:16px;background:#17202c;border:1px solid #49596c;border-radius:10px;box-shadow:0 12px 30px #0008}.tl-resolution-popover label{display:grid!important;gap:6px!important;margin:0!important}.tl-resolution-popover input,.tl-resolution-popover select{width:100%;min-width:0;padding:8px;background:#0d1117;color:#fff;border:1px solid #394656;border-radius:6px}.tl-resolution-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.tl-resolution-popover p,.tl-resolution-popover [role=status]{font-size:12px;line-height:1.6;color:#b7c2d0}.tl-resolution-popover [role=status]{display:block;margin-top:8px}
 .tl-timeline:has(#timelineResolutionControl[open]){overflow:visible}
+/* Preview review actions and a focused natural-language revision dialog. */
+#timelinePreviewActions{display:inline-flex;gap:6px;flex-wrap:wrap}
+.tl-monitor-footer{flex-wrap:wrap}
+#timelineRedoDialog{width:min(620px,calc(100vw - 40px));max-height:85vh;overflow:auto;background:var(--panel,#18202c);color:var(--text,#eee);border:1px solid #526071;border-radius:14px;padding:24px}
+#timelineRedoDialog::backdrop{background:#0009}
+#timelineRedoDialog label{display:block;margin-bottom:10px}
+#timelineRedoDialog textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:130px}
+#timelineRedoStatus{white-space:pre-wrap}
+.timeline-redo-buttons{display:flex;gap:10px;justify-content:flex-end}
