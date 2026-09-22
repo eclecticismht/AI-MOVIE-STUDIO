@@ -1,4 +1,10 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),{compile}=require('./shot-prompt');
+test('wardrobe binding applies to every character even without manual blocking',()=>{
+ const prompt=compile({dur:5,characterPositions:{a:'left'}},{},[{assetId:'a',name:'A',kind:'characters'},{assetId:'b',name:'B',kind:'characters'}]);
+ assert.match(prompt,/A: left/);assert.match(prompt,/B: as composed in this shot/);
+ assert.equal((prompt.match(/Wardrobe continuity:/g)||[]).length,2);
+ assert.match(prompt,/Change clothing only when this shot explicitly requires a costume change/);
+});
 test('prompt uses current-shot wardrobe and action, never historical character biography',()=>{
  const shot={dur:8,script:'Listen with hands still.',visual:'School shop.',camera:'Fixed medium shot.'};
  const prompt=compile(shot,{},[{name:'Chen',kind:'characters',notes:'Thirty-year-old construction worker with dusty gloves.\nState for this shot only: Teenage boy with white school sleeves.'},{name:'Sun',kind:'characters',notes:'Adult man in suit.'}]);
