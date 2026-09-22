@@ -4,7 +4,7 @@ const base={duration:4,width:864,height:480,prompt:'A quiet room.',dialogueEvent
 const plan=()=>({projectId:'p',title:'continuity',shots:[{...base,shotId:'a'},{...base,shotId:'b',continueFromShotId:'a'},{...base,shotId:'c',continueFromShotId:'b'},{...base,shotId:'d'}]});
 test('continuation preserves dependency and rejects missing, reordered or incompatible sources',()=>{
  assert.equal(validatePlan(plan()).shots[1].continueFromShotId,'a');
- for(const mutate of [p=>p.shots.shift(),p=>p.shots[1].continueFromShotId='c',p=>p.shots[1].firstFrame={file:'ams-ref-'+ 'a'.repeat(64)+'.png'},p=>p.shots[0].renderMode='black',p=>p.shots[1].width=640,p=>p.shots[1].dialogueEvents=[{type:'speech',speakerId:'c',speakerName:'陈实',delivery:'offscreen',text:'好。'}]]){const p=plan();mutate(p);assert.throws(()=>validatePlan(p));}
+ for(const mutate of [p=>p.shots.shift(),p=>p.shots[1].continueFromShotId='c',p=>p.shots[1].firstFrame={file:'ams-ref-'+ 'a'.repeat(64)+'.png'},p=>p.shots[0].renderMode='black',p=>p.shots[1].width=640,p=>p.shots[1].dialogueEvents=[{type:'speech',speakerId:'c',speakerName:'陈实',delivery:'onscreen',text:'好。'}]]){const p=plan();mutate(p);assert.throws(()=>validatePlan(p));}
 });
 test('retry invalidates the entire dependent chain, preserves unrelated clips and original',()=>{
  const p={...validatePlan(plan()),id:'film_0000000000000000',status:'complete'};

@@ -29,22 +29,23 @@ function validatePlan(input){
     ids.add(s.shotId);
     if(s.renderMode!==undefined&&!['model','black','screen'].includes(s.renderMode))throw Error('镜头制作方式无效');
     Framing.validateBottomCrop(s.cropBottomPercent);
-    if(s.renderMode==='black'&&(s.audioMode==='replacement'||s.firstFrame||(s.dialogueEvents||[]).length||(s.screenCards||[]).length||(s.references||[]).length||s.subtitle?.trim()))throw Error('纯黑静音镜头不能附带对白、文字卡或参考图');
+    if(s.renderMode==='black'&&(['replacement','overlay'].includes(s.audioMode)||s.firstFrame||(s.dialogueEvents||[]).length||(s.screenCards||[]).length||(s.references||[]).length||s.subtitle?.trim()))throw Error('纯黑静音镜头不能附带对白、文字卡或参考图');
     if(!Number.isFinite(s.duration)||s.duration<4||s.duration>15)throw Error('每镜时长必须在 4–15 秒之间。');
     if(![s.width,s.height].every(n=>Number.isInteger(n)&&n>=32&&n<=8192&&n%32===0))throw Error('生成宽高必须是 32 的整数倍。');
     const dialogueEvents=s.dialogueEvents?DialogueContract.validateEvents(s.dialogueEvents):undefined;if(dialogueEvents)DialogueContract.bindDialogue(s.prompt,dialogueEvents,s.duration,s.references||[]);
     const screen=ScreenShot.validateScreenShot({...s,dialogueEvents},validateReferences(s.references));
     if(s.firstFrame&&dialogueEvents?.some(e=>e.type==='speech'&&e.delivery==='onscreen')&&!s.firstFrame.speakerPosition)throw Error('首帧镜头请指定画内发声者位置，避免说话人物错位');
+    if(s.continuitySpeakerPosition&&!['left','center','right'].includes(s.continuitySpeakerPosition))throw Error('尾帧发声者位置无效');
     if(s.continueFromShotId){
       if(index===0||s.continueFromShotId!==input.shots[index-1].shotId)throw Error('承接镜头必须紧跟所引用的上一镜，请同时选择前镜');
       if(s.firstFrame||s.renderMode==='black'||input.shots[index-1].renderMode==='black')throw Error('承接尾帧不能同时指定独立首帧或纯黑镜头');
-      if(dialogueEvents?.some(e=>e.type==='speech'))throw Error('当前尾帧承接用于无口头对白的后续动作，请把对白留在前镜');
+      if(dialogueEvents?.some(e=>e.type==='speech'&&e.delivery==='onscreen')&&!['left','center','right'].includes(s.continuitySpeakerPosition))throw Error('尾帧承接有画内对白，请指定本镜发声者在画面中的位置');
       if(s.width!==input.shots[index-1].width||s.height!==input.shots[index-1].height)throw Error('承接镜头的画面尺寸必须与前镜一致');
       const identity=refs=>JSON.stringify(validateReferences(refs).map(r=>[r.assetId,r.kind,r.file]).sort((a,b)=>a[0].localeCompare(b[0])));
       if(identity(s.references)!==identity(input.shots[index-1].references))throw Error('承接镜头的参考资产或图片已改变，请使用独立镜头生成新画面');
     }
     if(s.sourceFingerprint!==undefined&&!/^[a-f0-9]{64}$/.test(s.sourceFingerprint))throw Error('来源校验信息无效');
-    return {faceRefineMode:require('./face-refine').mode(s.faceRefineMode),cropBottomPercent:Framing.validateBottomCrop(s.cropBottomPercent),...(s.sourceFingerprint?{sourceFingerprint:s.sourceFingerprint}:{}),...(s.continueFromShotId?{continueFromShotId:s.continueFromShotId}:{}),firstFrame:validateFirstFrame(s.firstFrame),...(s.audioMode==='replacement'?{audioAsset:(resolveAudioAsset(s.audioAsset),s.audioAsset)}:{}),audioMode:ShotAudio.validate(s.audioMode,dialogueEvents,s.audioAsset),...(s.renderMode==='black'?{renderMode:'black'}:{}),...(screen?{renderMode:'screen',...screen}:{}),screenCards:ScreenCards.validate(s.screenCards||[],s.sourceExcerpt),sourceExcerpt:typeof s.sourceExcerpt==='string'?s.sourceExcerpt.slice(0,30000):'',...(dialogueEvents?{dialogueEvents}:{}),references:validateReferences(s.references),shotId:s.shotId,sequence:index+1,prompt:s.prompt,duration:s.duration,width:s.width,height:s.height,subtitle:typeof s.subtitle==='string'?s.subtitle.slice(0,5000):''};
+    return {faceRefineMode:require('./face-refine').mode(s.faceRefineMode),cropBottomPercent:Framing.validateBottomCrop(s.cropBottomPercent),...(s.sourceFingerprint?{sourceFingerprint:s.sourceFingerprint}:{}),...(s.continueFromShotId?{continueFromShotId:s.continueFromShotId,continuitySpeakerPosition:s.continuitySpeakerPosition}:{}),firstFrame:validateFirstFrame(s.firstFrame),...(['replacement','overlay'].includes(s.audioMode)?{audioAsset:(resolveAudioAsset(s.audioAsset),s.audioAsset)}:{}),audioMode:ShotAudio.validate(s.audioMode,dialogueEvents,s.audioAsset),...(s.renderMode==='black'?{renderMode:'black'}:{}),...(screen?{renderMode:'screen',...screen}:{}),screenCards:ScreenCards.validate(s.screenCards||[],s.sourceExcerpt),sourceExcerpt:typeof s.sourceExcerpt==='string'?s.sourceExcerpt.slice(0,30000):'',...(dialogueEvents?{dialogueEvents}:{}),references:validateReferences(s.references),shotId:s.shotId,sequence:index+1,prompt:s.prompt,duration:s.duration,width:s.width,height:s.height,subtitle:typeof s.subtitle==='string'?s.subtitle.slice(0,5000):''};
   });
   return {projectId:input.projectId,title:input.title.slice(0,120),shots};
 }
@@ -109,6 +110,7 @@ async function work(run){
         const framePath=path.join(dir,`continuity-${i}.png`);
         await command(['-y','-i',path.join(dir,`source-${i-1}.mp4`),'-map','0:v:0','-an','-update','1',framePath],path.join(dir,`continuity-${i}.log`));
         firstFrame=await uploadReference('data:image/png;base64,'+fs.readFileSync(framePath).toString('base64'),'http://127.0.0.1:8188',fetch);
+        if(shot.continuitySpeakerPosition)firstFrame.speakerPosition=shot.continuitySpeakerPosition;
         shot.continuityFrame={...firstFrame,fromShotId:previous.shotId,fromJobId:previous.jobId};save(run);
       }
       await connector('/jobs',{id:jobId,projectId:run.projectId,shot:shot.shotId,prompt:shot.prompt,faceRefineMode:shot.faceRefineMode,firstFrame,references:shot.references,dialogueEvents:shot.dialogueEvents,duration:shot.duration,width:shot.width,height:shot.height,model:'Minimax H3',candidates:1});
@@ -145,9 +147,9 @@ async function work(run){
     }
     // Keep original model audio intact; create a reversible composition-only silent track.
     for(const [i,shot] of run.shots.entries())if(ShotAudio.validate(shot.audioMode,shot.dialogueEvents,shot.audioAsset)!=='model'){
-      const soundInput=shot.audioMode==='replacement'?['-stream_loop','-1','-i',resolveAudioAsset(shot.audioAsset)]:['-f','lavfi','-i','anullsrc=r=48000:cl=stereo'];
-      run.current={index:i+1,stage:shot.audioMode==='replacement'?'合成独立环境音（不保留模型人声）':'生成整镜静音版本（同时移除环境声）'};save(run);
-      await command(['-y','-i',path.join(dir,`clip-${i}.mp4`),...soundInput,'-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-shortest',path.join(dir,`sound-${i}.mp4`)],path.join(dir,`sound-${i}.log`));
+      const soundInput=['replacement','overlay'].includes(shot.audioMode)?['-stream_loop','-1','-i',resolveAudioAsset(shot.audioAsset)]:['-f','lavfi','-i','anullsrc=r=48000:cl=stereo'];
+      run.current={index:i+1,stage:shot.audioMode==='overlay'?'叠加音效并保留对白':['replacement','overlay'].includes(shot.audioMode)?'合成独立环境音（不保留模型人声）':'生成整镜静音版本（同时移除环境声）'};save(run);
+      await command(['-y','-i',path.join(dir,`clip-${i}.mp4`),...soundInput,...(shot.audioMode==='overlay'?['-filter_complex','[1:a]volume=0.25[fx];[0:a][fx]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[mix]','-map','0:v:0','-map','[mix]']:['-map','0:v:0','-map','1:a:0']),'-c:v','copy','-c:a','aac','-shortest',path.join(dir,`sound-${i}.mp4`)],path.join(dir,`sound-${i}.log`));
     }
     for(const [i,shot] of run.shots.entries())if(Framing.validateBottomCrop(shot.cropBottomPercent)>0){
       run.current={index:i+1,stage:'整理画面边缘（保留原始素材）'};save(run);
@@ -213,7 +215,7 @@ function recomposePlan(run,changes){
     if(change.cropBottomPercent!==undefined)shot.cropBottomPercent=Framing.validateBottomCrop(change.cropBottomPercent);
     const source=shot.sourceExcerpt||(shot.dialogueEvents||[]).filter(e=>e.type==='screen').map(e=>e.text).join('\n');
     if(change.screenCards!==undefined)shot.screenCards=ScreenCards.validate(change.screenCards,source);shot.sourceExcerpt=source;
-    if(change.audioMode!==undefined){if(shot.renderMode==='black'&&change.audioMode==='replacement')throw Error('纯黑静音镜头不能添加环境音');const asset=change.audioAsset??shot.audioAsset;shot.audioMode=ShotAudio.validate(change.audioMode,shot.dialogueEvents,asset);if(shot.audioMode==='replacement'){resolveAudioAsset(asset);shot.audioAsset=asset}delete shot.speechCheck;};
+    if(change.audioMode!==undefined){if(shot.renderMode==='black'&&['replacement','overlay'].includes(change.audioMode))throw Error('纯黑静音镜头不能添加环境音');const asset=change.audioAsset??shot.audioAsset;shot.audioMode=ShotAudio.validate(change.audioMode,shot.dialogueEvents,asset);if(['replacement','overlay'].includes(shot.audioMode)){resolveAudioAsset(asset);shot.audioAsset=asset}delete shot.speechCheck;};
   }
   return {id:'film_'+crypto.randomBytes(8).toString('hex'),projectId:run.projectId,title:run.title+(changes.some(c=>c.cropBottomPercent!==undefined)?' · 画面整理':changes.some(c=>c.audioMode!==undefined)?' · 声音更新':' · 文字更新'),parentRunId:run.id,deferQualityReview:!!run.deferQualityReview,qualityGate:!!run.qualityGate,alignSubtitles:true,asrModel:run.audit?.model==='medium'?'medium':run.asrModel||'small',compositionOnly:!partial,shots,status:'pending',createdAt:new Date().toISOString()};
 }

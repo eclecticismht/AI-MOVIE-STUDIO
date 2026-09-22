@@ -26,5 +26,5 @@ test('authored complete H3 prompt goes directly to film plan without a second re
  const {requests}=await submit(authored);assert.deepEqual(requests.map(r=>r.url),['/api/film']);assert.match(requests[0].body.shots[0].prompt,/face-down on the wooden tabletop/);
 });
 test('unstructured visual notes still receive automatic H3 formatting',async()=>{
- const {requests}=await submit('Phone on the wooden table.');assert.deepEqual(requests.map(r=>r.url),['/api/h3-prompts','/api/film']);assert.equal(requests[1].body.shots[0].prompt,'rewritten prompt');
+ const {requests}=await submit('Phone on the wooden table.');assert.deepEqual(requests.map(r=>r.url),['/api/h3-prompts','/api/film']);assert.match(requests[1].body.shots[0].prompt,/rewritten prompt/);assert.match(requests[1].body.shots[0].prompt,/overall_soundscape:/);
 });

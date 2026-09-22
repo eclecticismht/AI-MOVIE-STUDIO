@@ -11,7 +11,7 @@ function shotDialogueEvents(shot){
 function auditProductionShots(shots){
   const issues=[];
   shots.forEach((shot,i)=>{
-    for(const check of [()=>{if(typeof ShotAudio!=='undefined')ShotAudio.validate(shot.audioMode,shotDialogueEvents(shot),shot.audioAsset);if(shot.renderMode==='black'&&(shot.firstFrameUrl||shot.audioMode==='replacement'))throw Error('纯黑静音镜头不能配置首帧或环境音')},()=>requireShotReferenceImages(shot),()=>shotDialogueEvents(shot),()=>{if(typeof ScreenCards!=='undefined')ScreenCards.fromShot(shot,D)},()=>{if(/<d\b/i.test(shot.prompt||''))throw Error('旧提示词内含台词，请清空或改为纯画面提示，台词统一填写在对白栏。')}]){
+    for(const check of [()=>{if(typeof ShotAudio!=='undefined')ShotAudio.validate(shot.audioMode,shotDialogueEvents(shot),shot.audioAsset);if(shot.renderMode==='black'&&(shot.firstFrameUrl||['replacement','overlay'].includes(shot.audioMode)))throw Error('纯黑静音镜头不能配置首帧或环境音')},()=>requireShotReferenceImages(shot),()=>shotDialogueEvents(shot),()=>{if(typeof ScreenCards!=='undefined')ScreenCards.fromShot(shot,D)},()=>{if(/<d\b/i.test(shot.prompt||''))throw Error('旧提示词内含台词，请清空或改为纯画面提示，台词统一填写在对白栏。')}]){
       try{check()}catch(error){issues.push({index:i+1,shotId:shot.id,message:error.message})}
     }
   });
@@ -73,7 +73,7 @@ function shotReferenceAssets(shot){
       if(kind==='characters'&&presence!=='screen'&&voices.some(e=>e.speakerId===id&&e.delivery==='phone')&&!voices.some(e=>e.speakerId===id&&e.delivery==='onscreen'))continue;
       if(typeof AssetStates!=='undefined'){const states=AssetStates.validate(shot.assetStates||{},[...(shot.characterIds||[]),...(shot.sceneIds||[]),...(shot.propIds||[])],shot.sourceExcerpt);asset=AssetStates.resolve(asset,states[id]);if(asset.screenText&&((shot.renderMode==='screen'&&shot.screenSource==='text'&&id===shot.screenAssetId)||(!states[id]?.imageUrl&&shot.renderMode!=='screen')))asset.imageUrl=screenStateImage(asset.screenEffect==='type-delete'?'输入草稿（未发送）':asset.screenText)}
       if(shot.renderMode==='screen'&&shot.screenSource==='text'&&id===shot.screenAssetId){const canvas=document.createElement('canvas');ScreenLayout.draw(canvas,asset.screenText,{balance:/余额|银行/.test(asset.name),typing:asset.screenEffect==='type-delete'});asset.imageUrl=canvas.toDataURL('image/png');}
-      result.push({assetId:id,kind:presence==='screen'?'props':kind,name:String(asset.name||'').slice(0,100)+(presence==='screen'?'（仅屏幕照片）':''),notes:presence==='screen'?'This portrait appears ONLY inside an existing phone screen or photograph. Never place this person physically in the scene. Do not create a separate person, poster or floating panel.':String(asset.notes||asset.prompt||'').slice(0,3000),imageUrl:asset.imageUrl||''});
+      result.push({assetId:id,...(kind==='characters'&&shot.characterPositions?.[id]?{position:shot.characterPositions[id]}:{}),kind:presence==='screen'?'props':kind,name:String(asset.name||'').slice(0,100)+(presence==='screen'?'（仅屏幕照片）':''),notes:presence==='screen'?'This portrait appears ONLY inside an existing phone screen or photograph. Never place this person physically in the scene. Do not create a separate person, poster or floating panel.':String(asset.notes||asset.prompt||'').slice(0,3000),imageUrl:asset.imageUrl||''});
     }
   }
   return result;
