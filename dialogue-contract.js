@@ -1,5 +1,6 @@
 (function(root){
   const clean=s=>String(s||'').replace(/\s+/g,'').replace(/[“”「」『』]/g,'');
+  const isNarration=name=>/^(?:旁白|画外音|画外音新闻|新闻画外音|新闻播报|广播新闻)$/.test(name);
   function parseDialogue(text,characters=[]){
     if(!String(text||'').trim())return [];
     let input=String(text).trim();
@@ -20,9 +21,9 @@
       else if(/[（(](画外|画外音)[）)]/.test(label))delivery='offscreen';
       const name=label.replace(/[（(](语音|电话|画外|画外音)[）)]/g,'').trim();
       const speaker=characters.find(c=>c.name===name);
-      if(!speaker&&name!=='旁白')throw Error('对白人物“'+name+'”不在本项目角色库，请选择正确人物。');
+      if(!speaker&&!isNarration(name))throw Error('对白人物“'+name+'”不在本项目角色库，请选择正确人物。');
       if(/[<>]/.test(text))throw Error('对白只能包含台词正文，不能包含模型标签。');
-      return {type:'speech',speakerId:speaker?.id||'narrator',speakerName:name,delivery:name==='旁白'?'offscreen':delivery,text};
+      return {type:'speech',speakerId:speaker?.id||'narrator',speakerName:name,delivery:isNarration(name)?'offscreen':delivery,text};
     });
   }
   function validateEvents(events){
@@ -35,6 +36,13 @@
   }
   function checkSource(events,source){
     if(!source)return;
+    for(const e of events)if(e.type==='sound'){
+      const spoken=String(source).split(/\n/).some(line=>{
+        const m=/^\s*([^:：]{1,50})[:：]\s*(.+)$/.exec(line);
+        return m&&(isNarration(m[1].trim())||/[（(](?:画外|画外音|语音|电话)[）)]/.test(m[1]))&&clean(m[2]).includes(clean(e.text));
+      });
+      if(spoken)throw Error('原文中的画外播报或语音不能归为环境音，请保留说话标签并按对白时长拆镜。');
+    }
     for(const e of events)if(e.type==='speech'){
       const written=[...String(source).matchAll(/(?:配文|文字消息|屏幕文字|打字)[:：]\s*[“「"]([^”」"\n]+)[”」"]/gu)].map(m=>clean(m[1]));
       if(written.some(text=>text&&clean(e.text).includes(text)))throw Error('剧本明确标注为书面配文或文字消息，不能作为口头对白。');
@@ -45,7 +53,7 @@
       const labelled=lines.find(line=>clean(line).includes(clean(e.text))&&/^\s*[^:：]{1,30}[:：]/.test(line));
       if(labelled){const who=labelled.split(/[:：]/)[0].trim().replace(/[（(][^）)]*[）)]/g,'').trim();
         if(/打字|屏幕文字|文字消息/.test(who))throw Error('剧本中的文字消息被写成口头对白，请改为“屏幕文字：原文”。');
-        if(who!==e.speakerName&&who!=='画外声音')throw Error('台词说话人物与剧本不符：原文为“'+who+'”，分镜为“'+e.speakerName+'”。');
+        if(who!==e.speakerName&&who!=='画外声音'&&!(isNarration(who)&&isNarration(e.speakerName)))throw Error('台词说话人物与剧本不符：原文为“'+who+'”，分镜为“'+e.speakerName+'”。');
       }
     }
   }

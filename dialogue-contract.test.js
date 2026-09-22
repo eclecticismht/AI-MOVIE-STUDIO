@@ -2,6 +2,16 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const {parseDialogue,checkSource,bindDialogue,repairEvents}=require('./dialogue-contract');
 const {makeAss,validatePlan}=require('./film-api');
 const chars=[{id:'a',name:'甲'},{id:'b',name:'乙'}];
+test('broadcast narration remains speech without a visible character asset',()=>{
+  const source='画外音新闻：今天发布新的城市交通安排。';
+  const events=parseDialogue(source,chars);
+  assert.equal(events[0].type,'speech');assert.equal(events[0].delivery,'offscreen');
+  assert.doesNotThrow(()=>checkSource(events,source));
+  assert.doesNotThrow(()=>checkSource(parseDialogue('旁白：今天发布新的城市交通安排。'),source));
+  assert.throws(()=>checkSource(parseDialogue('环境音：今天发布新的城市交通安排。'),source),/不能归为环境音/);
+  assert.throws(()=>bindDialogue('visual',parseDialogue('画外音新闻：'+'字'.repeat(80)),15),/台词过长/);
+  assert.doesNotThrow(()=>checkSource(parseDialogue('环境音：车流声'),source));
+});
 test('names inside screen text stay silent, and quoted captions cannot become speech',()=>{
   const events=parseDialogue('屏幕文字：甲：收到 乙：谢谢',chars);assert.equal(events.length,1);assert.equal(events[0].type,'screen');
   assert.throws(()=>checkSource(parseDialogue('甲：今晚聚聚',chars),'他发布照片，配文：\n“今晚聚聚”'),/书面/);
