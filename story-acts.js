@@ -21,7 +21,7 @@
    acts[last].shotIds.push(s.id);
   }return acts;
  }
- function remove(acts,id){const index=acts.findIndex(a=>a.id===id);if(index<0)throw Error('场次不存在');const next=acts.map(a=>({...a,shotIds:[...a.shotIds]})),deleted=next.splice(index,1)[0];if(next.length)next[Math.max(0,index-1)].shotIds.push(...deleted.shotIds);return next}
+ function remove(acts,id){if(!acts.some(a=>a.id===id))throw Error('场次不存在');return acts.filter(a=>a.id!==id).map(a=>({...a,shotIds:[...a.shotIds]}))}
  function move(acts,shotId,target){if(!acts.some(a=>a.id===target))throw Error('目标场次不存在');return acts.map(a=>({...a,shotIds:[...a.shotIds.filter(id=>id!==shotId),...(a.id===target?[shotId]:[])]}))}
  const api={normalize,auto,remove,move,title,ordered};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.StoryActs=api;
 })(typeof globalThis!=='undefined'?globalThis:this);
