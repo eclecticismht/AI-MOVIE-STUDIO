@@ -10,3 +10,29 @@ test('act generation commits a separate batch while preserving other acts and pr
  vm.createContext(ctx);vm.runInContext(fs.readFileSync('act-generation-ui.js','utf8'),ctx);await vm.runInContext("generateStoryAct('a')",ctx);
  const result=JSON.parse(stored);assert.equal(result.scripts.length,2);assert.equal(result.shots.length,3);assert.equal(result.projects[0].screenplayId,'original');assert.equal(result.projects[0].storyboardBatchId,'old');assert.equal(result.projects[0].storyText,'whole story');assert.deepEqual(result.projects[0].storyActs['original|old'].acts[1],JSON.parse(JSON.stringify(p.storyActs['original|old'].acts[1])));assert.equal(result.projects[0].storyActs['original|old'].acts[0].pipeline,undefined);assert.equal(result.shots[2].prompt,'valid prompt');
 });
+
+test('resume retains storyboard correction after all repair attempts fail',async()=>{
+ const h=harness();let count=0;
+ h.io.request=async url=>{if(url==='/api/screenplay')return {content:'script'};count++;const e=Error('invalid dialogue');e.repair={content:'draft '+count,error:e.message};throw e};
+ await assert.rejects(run('story','model',null,h.io),/invalid dialogue/);
+ assert.equal(count,3);assert.equal(h.draft.repairs[0].content,'draft 3');
+ const next=harness(),original=next.io.request;
+ next.io.request=async(url,body)=>{if(url==='/api/storyboard')assert.equal(body.repair.content,'draft 3');return original(url,body)};
+ const result=await run('story','model',h.draft,next.io);assert.equal(result.repairs[0],undefined);assert.equal(result.shots[0].prompt,'valid H3');
+});
+test('old checkpoint limits assets to this act before retrying storyboard',async()=>{
+ const h=harness(),original=h.io.request;
+ h.io.request=async(url,body)=>{if(url==='/api/storyboard')assert.deepEqual(body.assets,{characters:[{id:'hero'}],scenes:[],props:[]});return original(url,body)};
+ await run('story','model',{story:'story',model:'model',screenplay:{content:'script'},prepared:{references:{characterIds:['hero'],sceneIds:[],propIds:[]},assets:{characters:[{id:'hero'},{id:'unrelated'}],scenes:[],props:[]}}},h.io);
+});
+test('act asset selection excludes other acts and preserves reused referenced assets',()=>{
+ const vm=require('node:vm'),fs=require('node:fs'),ctx={};vm.createContext(ctx);vm.runInContext(fs.readFileSync('act-generation-ui.js','utf8'),ctx);
+ ctx.prepared={references:{characterIds:['hero'],sceneIds:[],propIds:[]},collections:{characters:[{id:'hero',projectId:'p',name:'Hero'},...Array.from({length:201},(_,i)=>({id:'other'+i,projectId:'p',name:'Other'}))],scenes:[],props:[]}};
+ const assets=vm.runInContext("actGenerationAssets(prepared,'p')",ctx);assert.equal(assets.characters.length,1);assert.equal(assets.characters[0].id,'hero');
+});
+test('act progress stays in the active expanded panel after rerender',()=>{
+ const vm=require('node:vm'),fs=require('node:fs');const panel={open:false},el={dataset:{actStatus:'a'},textContent:'',closest:()=>panel};let rendered=0;
+ const ctx={D:{activeProjectId:'p'},document:{querySelectorAll:()=>[el]},renderScripts:()=>rendered++,storyFlowNotice(){}};vm.createContext(ctx);vm.runInContext(fs.readFileSync('act-generation-ui.js','utf8'),ctx);
+ vm.runInContext("actGenerationRender('a');actGenerationNotice({id:'p'},'a','分镜生成失败')",ctx);
+ assert.equal(rendered,1);assert.equal(panel.open,true);assert.equal(el.textContent,'分镜生成失败');
+});

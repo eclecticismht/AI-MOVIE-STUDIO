@@ -5,16 +5,24 @@
   const checkpoint=async()=>io.save(structuredClone(state));
   if(!state.screenplay){io.notice('1 / 3 · 生成本场剧本与资产');state.screenplay=await io.request('/api/screenplay',{story,model,includeAssets:true,notes:'只改编当前场次原文，不补写其他场次。'});if(!state.screenplay.content?.trim())throw Error('未返回本场剧本');await checkpoint()}
   if(!state.prepared){state.prepared=io.prepare(state.screenplay);await checkpoint()}
+  // Old checkpoints included every project asset. Narrow only before any shots
+  // have been accepted, so resuming never invalidates an already saved reference.
+  if(!state.shots&&!state.parts?.some(Boolean)&&state.prepared.references){
+   for(const [kind,key] of [['characters','characterIds'],['scenes','sceneIds'],['props','propIds']]){
+    const ids=state.prepared.references[key];
+    if(Array.isArray(ids))state.prepared.assets[kind]=state.prepared.assets[kind].filter(a=>ids.includes(a.id));
+   }
+  }
   if(!state.shots){
    const parts=io.split(state.screenplay.content);state.parts||=[];
    for(let i=0;i<parts.length;i++){
     if(state.parts[i])continue;io.notice(`2 / 3 · 生成本场场景与镜头 ${i+1}/${parts.length}`);
-    let result,repair;
+    let result,repair=state.repairs?.[i];
     for(let attempt=0;attempt<3;attempt++){
-     try{result=await io.request('/api/storyboard',{screenplay:parts[i].text,model,assets:state.prepared.assets,timing:{mode:'auto'},repair,notes:'只生成本段镜头。口头对白按每秒3字加1秒分配时长，每镜4至15秒，长对白按原文拆镜。'});break}catch(e){if(!e.repair||attempt===2)throw e;repair=e.repair}
+     try{result=await io.request('/api/storyboard',{screenplay:parts[i].text,model,assets:state.prepared.assets,timing:{mode:'auto'},repair,notes:'只生成本段镜头。口头对白按每秒3字加1秒分配时长，每镜4至15秒，长对白按原文拆镜。'});break}catch(e){if(!e.repair)throw e;repair=e.repair;state.repairs||={};state.repairs[i]=repair;await checkpoint();if(attempt===2)throw e}
     }
     if(!result?.shots?.length||result.shots[0].continuePrevious)throw Error('本场分镜为空或首镜错误承接其他场次');
-    state.parts[i]=result.shots;await checkpoint();
+    state.parts[i]=result.shots;if(state.repairs)delete state.repairs[i];await checkpoint();
    }
    state.shots=io.makeShots(state.parts.flat(),state.prepared);await checkpoint();
   }
