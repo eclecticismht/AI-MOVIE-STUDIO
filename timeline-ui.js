@@ -4,7 +4,7 @@ const tlRemoteJobs=new Map();
 function tlClips(){const p=activeProject(),batches=(D.storyboardBatches||[]).filter(b=>b.projectId===p.id),id=p.storyboardBatchId||batches.at(-1)?.id;return TimelineModel.clips(D.shots.filter(s=>s.projectId===p.id&&s.storyboardBatchId===id))}
 function tlCurrent(){return tlClips().find(c=>c.shot.id===TL.shotId)}
 function tlMessage(text){TL.notice=text;const el=document.getElementById('tl-notice');if(el)el.textContent=text}
-function tlCanLeave(){if(TL.dirty){tlMessage('声音设置尚未保存。请先保存或撤销，再切换镜头或工作区。');return false}if(editingShotId){tlMessage('请先保存或取消展开面板中的分镜编辑，再切换镜头或工作区。');return false}return true}
+function tlCanLeave(){if(TL.dirty){tlMessage('声音设置尚未保存。请先保存或撤销，再切换镜头或工作区。');return false}if(editingShotId){if(typeof shotEditorHasChanges==='function'&&!shotEditorHasChanges()){editingShotId=null;renderShots2()}else{tlMessage('当前镜头有未保存修改，请点击编辑面板顶部的“保存”或“关闭 / 放弃修改”。');return false}}return true}
 function tlSelect(id,seek=true){if(!tlCanLeave())return;const c=tlClips().find(c=>c.shot.id===id);if(!c)return;document.getElementById('tl-video')?.pause();TL.shotId=id;TL.notice='' ;TL.version=null;if(seek)TL.time=c.start;TL.previewKey=null;tlRender()}
 function tlMode(mode){if(!tlCanLeave())return;TL.mode=mode;tlInspector();if(mode==='edit')tlTools('edit')}
 function tlBatch(id){if(!tlCanLeave())return tlRender();const p=activeProject(),next={...p,storyboardBatchId:id,filmBatchId:id};try{localStorage.setItem('aimovie_data',JSON.stringify({...D,projects:D.projects.map(x=>x===p?next:x)}));Object.assign(p,next);TL.shotId=null;TL.version=null;TL.previewKey=null;TL.time=0;tlRender()}catch(e){tlMessage('批次切换保存失败：'+e.message)}}
@@ -80,7 +80,7 @@ function tlTools(mode){
   if(mode==='edit'){const id=tlCurrent()?.shot.storyboardBatchId;if(id&&activeProject().filmBatchId!==id){activeProject().filmBatchId=id;}renderEdit()}
   tlInspector();document.getElementById('tl-drawer').scrollIntoView({behavior:'smooth',block:'start'});
 }
-function tlCloseTools(){if(editingShotId){tlMessage('请先保存或取消分镜编辑，再收起工具。');return}TL.drawer=false;if(TL.mode==='edit')TL.mode='shots';document.getElementById('tl-drawer').hidden=true;tlPages.forEach(id=>document.getElementById(id).classList.remove('on'));tlRender()}
+function tlCloseTools(){if(!tlCanLeave())return;TL.drawer=false;if(TL.mode==='edit')TL.mode='shots';document.getElementById('tl-drawer').hidden=true;tlPages.forEach(id=>document.getElementById(id).classList.remove('on'));tlRender()}
 const tlOriginalGo=go;
 go=function(id){
   if(document.getElementById('timeline')?.classList.contains('on')&&!tlCanLeave())return;
@@ -92,7 +92,7 @@ go=function(id){
 };
 const tlOriginalRenderAll=renderAll;
 renderAll=function(){tlOriginalRenderAll();if(document.getElementById('timeline')?.classList.contains('on'))tlRender()};
-window.addEventListener('beforeunload',event=>{if(TL.dirty||editingShotId){event.preventDefault();event.returnValue=''}});
+window.addEventListener('beforeunload',event=>{if(TL.dirty||(editingShotId&&(typeof shotEditorHasChanges!=='function'||shotEditorHasChanges()))){event.preventDefault();event.returnValue=''}});
 // Keep the timeline batch and the embedded production controls in sync.
 const tlSelectFilmBatch=selectFilmBatch;
 selectFilmBatch=function(id){if(document.getElementById('timeline')?.classList.contains('on')){tlBatch(id);renderEdit()}else tlSelectFilmBatch(id)};

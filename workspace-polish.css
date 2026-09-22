@@ -12,3 +12,13 @@ main select,main input:not([type=checkbox]):not([type=range]):not([type=file]),m
 .shot-continuity-control{padding:12px;border-left:3px solid #bd9b61;background:rgba(189,155,97,.08)}
 .shot-direction-editor>label{display:block;margin:14px 0}.shot-direction-editor>label>select,.shot-direction-editor>label>input{margin-left:8px;max-width:100%}
 @media(max-width:720px){.shot-direction-panel{padding:12px}.shot-direction-panel select{min-height:44px}}
+.simple-fold{border:1px solid #303a48;border-radius:10px;padding:12px;margin:12px 0;background:#111721}
+.simple-fold>summary,.simple-nav-more>summary,.simple-more-actions>summary{cursor:pointer;padding:8px;color:#c9d2df;font-weight:600}
+.simple-fold[open]>summary{margin-bottom:12px}.simple-nav-more{margin-top:20px;border-top:1px solid #303a48;padding-top:12px}
+.simple-savebar{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#18212d;border:1px solid #3b495a;padding:12px;border-radius:10px;box-shadow:0 4px 16px #0004}
+.simple-more-actions{margin-left:auto}.simple-more-actions[open]{padding:6px;background:#202b39}
+#shots.simplified-editing>article:not(.simple-active-shot){display:none}
+#shots.simplified-editing>.toolbar,#shots.simplified-editing>.simple-fold,#shots.simplified-editing>.simple-active-shot>:not(.simple-shot-editor){display:none}
+.simple-active-shot{padding:0!important;border:0!important;background:transparent!important}.simple-more-actions .btn{display:block;margin:8px 0}
+.workspace-path button{display:none}.workspace-path{margin:0 0 12px!important;padding:0!important}
+@media(max-width:720px){.simple-savebar{gap:8px}.simple-savebar>span{flex-basis:100%}}
