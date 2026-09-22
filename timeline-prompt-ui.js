@@ -3,9 +3,9 @@ const timelinePromptDrafts=new Map();
 function timelinePromptKey(s){return s.projectId+'|'+s.id}
 function timelinePromptChanged(d){return d.text!==d.initial}
 function timelinePromptRender(){
- const monitor=document.querySelector('#timeline .tl-monitor'),shot=tlCurrent()?.shot;if(!monitor)return;
+ const timeline=document.querySelector('#timeline .tl-timeline'),shot=tlCurrent()?.shot;if(!timeline)return;
  let panel=document.getElementById('timelinePromptPanel');
- if(!panel){panel=document.createElement('section');panel.id='timelinePromptPanel';panel.className='timeline-prompt-panel';monitor.append(panel)}
+ if(!panel){panel=document.createElement('section');panel.id='timelinePromptPanel';panel.className='timeline-prompt-panel';timeline.after(panel)}
  if(!shot){panel.hidden=true;return}panel.hidden=false;
  const key=timelinePromptKey(shot);
  // Do not replace a focused editor on progress polling or unrelated renders.

@@ -22,6 +22,6 @@ main select,main input:not([type=checkbox]):not([type=range]):not([type=file]),m
 .simple-active-shot{padding:0!important;border:0!important;background:transparent!important}.simple-more-actions .btn{display:block;margin:8px 0}
 .workspace-path button{display:none}.workspace-path{margin:0 0 12px!important;padding:0!important}
 @media(max-width:720px){.simple-savebar{gap:8px}.simple-savebar>span{flex-basis:100%}}
-.timeline-prompt-panel{padding:14px;border-top:1px solid #34404d;background:#121924;border-radius:0 0 10px 10px}
+.timeline-prompt-panel{padding:16px;margin-top:16px;border:1px solid #34404d;background:#121924;border-radius:10px;width:100%}
 .timeline-prompt-heading,.timeline-prompt-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.timeline-prompt-heading{justify-content:space-between;margin-bottom:10px;font-weight:600}
 .timeline-prompt-panel textarea{display:block;min-height:180px;max-height:480px;resize:vertical;line-height:1.6}.timeline-prompt-actions{margin-top:10px}.timeline-prompt-actions [role=status]{font-size:12px;color:#aebccc;flex:1;min-width:140px}
