@@ -57,7 +57,7 @@ function cutAttachAudio(element){element.volume=1;const ctx=cutAudioContext(),so
 function cutStop(){CUT.playing=false;cancelAnimationFrame(CUT.raf);for(const slot of CUT.slots){slot.video.pause();slot.audio?.pause()}CUT.music?.pause()}
 function cutClear(){cutStop();for(const slot of CUT.slots){slot.node?.disconnect();slot.audioNode?.disconnect()}CUT.slots=[];document.getElementById('tl-screen')?.replaceChildren();}
 function cutSetSlot(slot,c,time){
-  const g=tlMedia(c.shot),url=g?.videoUrl||c.shot.videoUrl;if(!url)throw Error('第 '+(tlClips().findIndex(x=>x.shot.id===c.shot.id)+1)+' 镜暂无可用视频，播放停止，不会跳过缺镜。');
+  const g=tlMedia(c.shot),url=g?.videoUrl||c.shot.videoUrl;if(!url)throw Error('第 '+(tlClips().findIndex(x=>x.shot.id===c.shot.id)+1)+' 镜：'+TimelineModel.missingReason(D,c.shot));
   const proxy=cutProxy(url);
   if(slot.id!==c.shot.id||slot.url!==url){slot.video.pause();slot.audio?.pause();slot.audioNode?.disconnect();slot.audio=null;slot.audioNode=null;slot.id=c.shot.id;slot.url=url;slot.video.src=proxy;
     slot.video.onerror=()=>{cutStop();tlMessage('视频读取失败，请检查连接。')};
