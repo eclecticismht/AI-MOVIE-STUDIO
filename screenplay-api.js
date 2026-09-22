@@ -80,7 +80,7 @@ function parseScreenplayBundle(content) {
   }
   return {content:data.content.trim(),assets};
 }
-function createScreenplayApi({fetchImpl=fetch, env=process.env}={}) {
+function createScreenplayApi({fetchImpl=fetch, env=process.env,credentialStore=env===process.env?require('./ai-credentials').store:{status:()=>({}),get:async()=>''}}={}) {
   const send=(res,status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data))};
   async function readBody(req) {
     const raw=await require('./request-body').readUtf8(req,400000,'故事过长，请按章节生成（每次最多 60,000 字）。');
@@ -94,7 +94,7 @@ function createScreenplayApi({fetchImpl=fetch, env=process.env}={}) {
     if(origin && origin!==`http://${req.headers.host}`){send(res,403,{error:'请从本地工作室页面生成剧本。'});return true}
     try {
       if(req.method==='GET'&&pathname==='/api/screenplay/config') {
-        send(res,200,{configured:!!env.DEEPSEEK_API_KEY,openaiConfigured:!!env.OPENAI_API_KEY,defaultModel:env.SCREENPLAY_MODEL||'deepseek-flash'});return true;
+        const saved=credentialStore.status();send(res,200,{configured:!!(saved.deepseek||env.DEEPSEEK_API_KEY),openaiConfigured:!!(saved.openai||env.OPENAI_API_KEY),defaultModel:env.SCREENPLAY_MODEL||'deepseek-flash'});return true;
       }
       if(req.method!=='POST'||(!storyboard&&!h3&&pathname!=='/api/screenplay')){send(res,404,{error:'接口不存在。'});return true}
       const input=await readBody(req);
@@ -104,7 +104,7 @@ function createScreenplayApi({fetchImpl=fetch, env=process.env}={}) {
       if(input.story.length>60000){send(res,400,{error:'故事超过 60,000 字，请按章节生成。'});return true}
       const model=(typeof input.model==='string'&&input.model.trim())||env.SCREENPLAY_MODEL||'deepseek-flash';
       const openai=model.startsWith('gpt-'),provider=openai?'OpenAI':'DeepSeek',base=openai?'https://api.openai.com/v1':'https://api.deepseek.com';
-      const apiKey=(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim()||(openai?env.OPENAI_API_KEY:env.DEEPSEEK_API_KEY);
+      const apiKey=(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim()||await credentialStore.get(openai?'openai':'deepseek')||(openai?env.OPENAI_API_KEY:env.DEEPSEEK_API_KEY);
       if(!apiKey){send(res,401,{error:`请在 AI 模型设置中填写 ${provider} API Key。`});return true}
       if(!/^(?:deepseek|gpt)-[a-zA-Z0-9._-]+$/.test(model)){send(res,400,{error:'文字模型名称不正确，请选择 DeepSeek 或 GPT 模型。'});return true}
       const notes=typeof input.notes==='string'?input.notes.slice(0,3000):'';

@@ -5,6 +5,7 @@ const path = require("path");
 const screenplayApi = require("./screenplay-api").createScreenplayApi();
 const filmApi = require('./film-api').createFilmApi();
 const firstFrameApi = require('./first-frame-api').createFirstFrameApi();
+const aiSettingsApi=require('./ai-settings-api').createSettingsApi();
 
 const root = __dirname;
 const port = Number(process.env.PORT || 4173);
@@ -12,6 +13,7 @@ const types = {".gif":"image/gif", ".mp4":"video/mp4", ".webm":"video/webm", ".m
 
 http.createServer(async (request, response) => {
   const requestPath = new URL(request.url, `http://${request.headers.host}`).pathname;
+  if(await aiSettingsApi(request,response,requestPath))return;
   if(await require('./prompt-video').promptVideoApi(request,response,requestPath))return;
   if(await require('./story-document-api').storyDocumentApi(request,response,requestPath))return;
   if(await require('./timeline-export-api').timelineExportApi(request,response,requestPath))return;
