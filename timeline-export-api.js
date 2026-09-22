@@ -11,6 +11,8 @@ function sourceLocation(value){
     const query=new URLSearchParams({filename,subfolder:folder,type});return {url:'http://127.0.0.1:8188/view?'+query};
   }
   if(u.origin==='http://127.0.0.1:4173'){
+    const imported=/^\/assets\/imported\/(asset-[a-f0-9]{64}\.(mp4|webm|mov))$/.exec(u.pathname);
+    if(imported&&!u.search)return {file:path.join(__dirname,'assets','imported',imported[1])};
     const preview=/^\/api\/film\/(film_[a-f0-9]+)\/preview$/.exec(u.pathname);
     if(preview&&/^\d{1,4}$/.test(u.searchParams.get('index')||''))return {file:path.join(__dirname,'film-runs',preview[1],'clip-'+u.searchParams.get('index')+'.mp4')};
     const movie=/^\/film-runs\/(film_[a-f0-9]+)\/(movie|clip-\d+)\.mp4$/.exec(u.pathname);

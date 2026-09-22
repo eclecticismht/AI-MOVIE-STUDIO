@@ -27,6 +27,7 @@ function validatePlan(input){
   const shots=input.shots.map((s,index)=>{
     if(!s||typeof s.shotId!=='string'||ids.has(s.shotId)||typeof s.prompt!=='string'||!s.prompt.trim()||s.prompt.length>30000)throw Error('分镜提示词缺失或镜头重复。');
     ids.add(s.shotId);
+    if((s.references||[]).some(r=>['images','videos'].includes(r.kind))&&(s.firstFrame||s.continueFromShotId||['black','screen'].includes(s.renderMode)))throw Error('上传参考素材不能与首帧、尾帧承接或本地合成同时使用');
     if(s.renderMode!==undefined&&!['model','black','screen'].includes(s.renderMode))throw Error('镜头制作方式无效');
     Framing.validateBottomCrop(s.cropBottomPercent);
     if(s.renderMode==='black'&&(['replacement','overlay'].includes(s.audioMode)||s.firstFrame||(s.dialogueEvents||[]).length||(s.screenCards||[]).length||(s.references||[]).length||s.subtitle?.trim()))throw Error('纯黑静音镜头不能附带对白、文字卡或参考图');

@@ -39,3 +39,13 @@ main select,main input:not([type=checkbox]):not([type=range]):not([type=file]),m
 #timelineRedoDialog textarea{width:100%;box-sizing:border-box;resize:vertical;min-height:130px}
 #timelineRedoStatus{white-space:pre-wrap}
 .timeline-redo-buttons{display:flex;gap:10px;justify-content:flex-end}
+#timelinePromptMedia{margin-top:18px;padding-top:14px;border-top:1px solid #384253}
+.prompt-media-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.prompt-media-grid article{padding:12px;border:1px solid #384253;border-radius:10px;min-width:0}
+.prompt-media-grid b{display:block;overflow-wrap:anywhere}
+.prompt-media-grid img,.prompt-media-grid video{width:100%;height:160px;object-fit:contain;background:#090c12;margin:8px 0}
+.prompt-media-grid textarea{box-sizing:border-box;width:100%}
+#timelineFramePicker{width:min(750px,90vw);max-height:90vh;overflow:auto;background:#18202c;color:#eee;border:1px solid #526071;border-radius:14px;padding:24px}
+#timelineFramePicker::backdrop{background:#0009}
+.prompt-media-purpose{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.prompt-frame-summary{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:12px}

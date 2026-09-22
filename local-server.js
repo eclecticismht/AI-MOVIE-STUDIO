@@ -12,6 +12,7 @@ const types = {".gif":"image/gif", ".mp4":"video/mp4", ".webm":"video/webm", ".m
 
 http.createServer(async (request, response) => {
   const requestPath = new URL(request.url, `http://${request.headers.host}`).pathname;
+  if(await require('./prompt-video').promptVideoApi(request,response,requestPath))return;
   if(await require('./story-document-api').storyDocumentApi(request,response,requestPath))return;
   if(await require('./timeline-export-api').timelineExportApi(request,response,requestPath))return;
   if(await require('./asset-media-api').assetMediaApi(request,response,requestPath))return;

@@ -97,7 +97,7 @@ function requireShotReferenceImages(shot){
   const misplaced=shotDialogueEvents(shot).filter(e=>e.type==='speech'&&e.delivery==='onscreen'&&['screen','offscreen'].includes(shot.assetStates?.[e.speakerId]?.presence));
   if(misplaced.length)throw Error('画内发声人物被设为屏幕或画外人物：'+misplaced.map(e=>e.speakerName).join('、')+'。请核对人物出现方式和对白类型。');
   if(missing.length)throw Error('请先给以下资产添加参考图片：'+missing.map(a=>a.name).join('、')+'。不在画面中的资产可在编辑分镜中取消引用。');
-  if(assets.length>9)throw Error('每镜最多 9 张参考图片，请拆分镜头或调整引用。');
+  if(assets.filter(a=>a.kind!=='videos').length>9||assets.filter(a=>a.kind==='videos').length>3)throw Error('每镜最多 9 张参考图片和 3 个参考视频，请调整引用。');
   return assets;
 }
 async function prepareShotReferences(shot){
@@ -108,6 +108,7 @@ async function uploadShotImages(assets){
   for(const asset of assets){
     const key=D.connector.endpoint+'|'+asset.imageUrl;
     if(!referenceUploads.has(key))referenceUploads.set(key,(async()=>{
+      if(asset.kind==='videos'){const response=await fetch(D.connector.endpoint+'/reference-videos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:asset.file}),signal:AbortSignal.timeout(70000)}),out=await response.json();if(!response.ok)throw Error(out.error||'视频上传失败');return out.file;}
       let dataUrl=asset.imageUrl;
       if(!dataUrl.startsWith('data:')){
         if(!/^https?:\/\//i.test(dataUrl)&&!dataUrl.startsWith('/'))throw Error('请使用资产档案中的“导入图片”选择本地图片，不能直接填写文件路径。');

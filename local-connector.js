@@ -36,7 +36,7 @@ function renderDimensions(job) {
 try { JSON.parse(fs.readFileSync(queueFile, "utf8")).forEach(job => jobs.set(job.id, job)); } catch (error) { if (error.code !== "ENOENT") console.warn("Could not restore connector queue:", error.message); }
 function persistQueue() { fs.writeFileSync(queueFile, JSON.stringify([...jobs.values()], null, 2)); }
 function h3FrameCount(seconds) { return Math.max(5, 17 * Math.round((Math.max(4, Math.min(15, Number(seconds) || 5)) * 24 - 5) / 17) + 5); }
-function comfyGraph(job) { const frames=h3FrameCount(job.duration), prompt=job.dialogueEvents?DialogueContract.bindDialogue(job.prompt,job.dialogueEvents,job.duration,job.references||[]):job.prompt, prefix="AI_MOVIE_STUDIO/"+job.id,dimensions=renderDimensions(job),refs=validateReferences(job.references); const graph= {
+function comfyGraph(job) { if(job.firstFrame&&(job.references||[]).some(r=>['images','videos'].includes(r.kind)))throw Error('上传参考素材不能与独立首帧同时使用'); const frames=h3FrameCount(job.duration), prompt=job.dialogueEvents?DialogueContract.bindDialogue(job.prompt,job.dialogueEvents,job.duration,job.references||[]):job.prompt, prefix="AI_MOVIE_STUDIO/"+job.id,dimensions=renderDimensions(job),refs=validateReferences(job.references); const graph= {
   "1":{class_type:"UNETLoader",inputs:{unet_name:"Minimax_H3\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",weight_dtype:"default"}},
   "2":{class_type:"CLIPLoader",inputs:{clip_name:"qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",type:"minimax",device:"default"}},
   "3":{class_type:"VAELoader",inputs:{vae_name:"minimax_h3_video_vae_fp16.safetensors"}},
@@ -57,7 +57,8 @@ function comfyGraph(job) { const frames=h3FrameCount(job.duration), prompt=job.d
     graph['5'].inputs.global_prompt=referencePrompt(prompt,refs);
     graph['5'].inputs.r2v_groups=['8',0];
     graph['8']={class_type:'MiniMaxH3DirectorGroupReferenceToVideo',inputs:{prompt:referencePrompt(prompt,refs),duration_sec:frames/24}};
-    refs.forEach((r,i)=>{const id=String(20+i);graph[id]={class_type:'LoadImage',inputs:{image:r.file}};graph['8'].inputs['ref_images.ref_image_'+i]=[id,0]});
+    refs.filter(r=>r.kind!=='videos').forEach((r,i)=>{const id=String(20+i);graph[id]={class_type:'LoadImage',inputs:{image:r.file}};graph['8'].inputs['ref_images.ref_image_'+i]=[id,0]});
+    refs.filter(r=>r.kind==='videos').forEach((r,i)=>{const id=String(40+i*2),parts=String(41+i*2);graph[id]={class_type:'LoadVideo',inputs:{file:r.file}};graph[parts]={class_type:'GetVideoComponents',inputs:{video:[id,0]}};graph['8'].inputs['ref_videos.ref_video_'+i]=[parts,0]});
   }
   return graph;
 }
@@ -123,6 +124,7 @@ http.createServer(async (request, response) => {
   }
   if (request.method === "GET" && request.url === "/health") return send(response, 200, {ok:true, connector:"AI MOVIE STUDIO Local Connector", node:{name:"NODE_01",gpu:"RTX Pro 4000 24GB"}, h3WorkerConfigured:false, queued:jobs.size});
   if (request.method === "GET" && request.url === "/jobs") return send(response, 200, {jobs:[...jobs.values()]});
+  if(request.method==='POST'&&request.url==='/reference-videos'){try{const data=await body(request);return send(response,201,await require('./prompt-video').uploadVideo(data.file,comfyUrl))}catch(error){return send(response,400,{error:error.message})}}
   if(request.method==='POST'&&request.url==='/references') {try{const data=await body(request);return send(response,201,await uploadReference(data.dataUrl,comfyUrl))}catch(error){return send(response,400,{error:error.message})}}
   const graphMatch=request.url.match(/^\/jobs\/([^/]+)\/graph$/);
   if (request.method === "GET" && graphMatch) { const job=jobs.get(decodeURIComponent(graphMatch[1])); return job ? send(response,200,{ok:true,prompt:comfyGraph(job)}) : send(response,404,{ok:false,error:"Unknown connector job."}); }

@@ -3,6 +3,13 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const {EventEmitter}=require('node:events');
+test('reference videos reach H3 as frame batches with distinct image and video labels',async()=>{
+ const request=harness(async()=>({ok:true,json:async()=>({})}));
+ const references=[{assetId:'photo',kind:'images',name:'Photo',notes:'State for this shot only: framing',file:'ams-ref-'+'a'.repeat(64)+'.png'},{assetId:'video',kind:'videos',name:'Motion',notes:'State for this shot only: bicycle movement',file:'ams-video-'+'b'.repeat(64)+'.mp4'}];
+ assert.equal((await request('POST','/jobs',{id:'media-test',prompt:'integrated_multimodal_description: Ride.\noverall_soundscape: Traffic.\nnon_diegetic_music: N/A',duration:5,references})).status,202);
+ const graph=(await request('GET','/jobs/media-test/graph')).data.prompt;
+ assert.equal(graph['40'].class_type,'LoadVideo');assert.equal(graph['41'].class_type,'GetVideoComponents');assert.deepEqual(graph['8'].inputs['ref_videos.ref_video_0'],['41',0]);assert.deepEqual(graph['8'].inputs['ref_images.ref_image_0'],['20',0]);assert.match(graph['5'].inputs.global_prompt,/<Video 1>/);assert.match(graph['5'].inputs.global_prompt,/<Picture 1>/);assert.equal(graph['8'].inputs['ref_video_audios.ref_video_audio_0'],undefined);
+});
 
 function harness(fetchImpl) {
   let handler, saved='[]';
