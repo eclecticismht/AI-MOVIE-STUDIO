@@ -3,6 +3,22 @@ const {compareSpeech}=require('./speech-audit');
 const events=[{type:'speech',text:'快了。',speakerName:'陈实',delivery:'onscreen'}];
 test('speech match never certifies speaker identity',()=>{const r=compareSpeech(events,{segments:[{text:' 快了！'}]});assert.equal(r.status,'text_match');assert.equal(r.speakerIdentity,'not_verified')});
 test('wrong words flagged',()=>assert.equal(compareSpeech(events,{segments:[{text:'你好'}]}).status,'needs_review'));
+test('ordinary numeric spellings match without rewriting original dialogue or transcription',()=>{
+ for(const [expected,actual] of [['今天我40了，喝点。','今天我四十了喝点'],['今天我４０了','今天我四十了'],['10元','十元'],['101元','一百零一元'],['1001元','一千零一元'],['0元','零元']]){
+  const r=compareSpeech([{type:'speech',text:expected}],{segments:[{text:actual}]});
+  assert.equal(r.status,'text_match',expected);assert.equal(r.expected,expected);assert.equal(r.actual,actual);assert.equal(r.speakerIdentity,'not_verified');
+ }
+});
+test('numeric spelling comparison still rejects changed numbers, words and extra particles',()=>{
+ const event=[{type:'speech',text:'今天我40了，喝点。'}];
+ for(const actual of ['今天我四十一了喝点','今天我四十了喝点儿','今天我四十了','今天我四十了喝点喝点'])assert.equal(compareSpeech(event,{segments:[{text:actual}]}).status,'needs_review',actual);
+ for(const [expected,actual] of [['编号040','编号四十'],['3.14','三百一十四'],['10000','一万']])assert.equal(compareSpeech([{type:'speech',text:expected}],{segments:[{text:actual}]}).status,'needs_review');
+});
+test('alternate recognition ranking treats equivalent integer spellings consistently',()=>{
+ const {selectTranscription}=require('./speech-audit');
+ const source={normalizedExpected:'今天我40了，喝点。',segments:[{text:'今天我四十了喝点'}],alternatives:[{method:'normalized-no-vad',segments:[{text:'今天我四十了喝点儿'}]}]};
+ const selected=selectTranscription(source);assert.equal(selected.method,'vad');assert.equal(selected.recognitionAttempts.length,2);assert.equal(selected.segments[0].text,'今天我四十了喝点');
+});
 test('traditional transcript can match simplified script without hiding original output',()=>{const r=compareSpeech([{type:'speech',text:'还你',speakerName:'甲',delivery:'phone'}],{normalizedExpected:'还你',segments:[{text:'還你',normalizedText:'还你'}]});assert.equal(r.status,'text_match');assert.equal(r.actual,'還你')});
 test('screen messages are not expected speech',()=>assert.equal(compareSpeech([{type:'screen',text:'收到'}],{segments:[{text:'收到'}]}).status,'needs_review'));
 test('missing speech flagged and old jobs remain unverifiable',()=>{assert.equal(compareSpeech(events,{segments:[]}).status,'needs_review');assert.equal(compareSpeech(undefined,{segments:[]}).status,'unverifiable')});

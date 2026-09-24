@@ -1,5 +1,23 @@
 const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process');
 const normalize=s=>String(s||'').normalize('NFKC').replace(/[\p{P}\p{Z}\s]/gu,'').toLowerCase();
+function comparisonText(value){
+ const text=String(value||'').normalize('NFKC');
+ // Compare ordinary integer spellings without rewriting the script or ASR output.
+ // Keep decimal tokens, leading-zero identifiers and long numbers literal.
+ return normalize(text.replace(/\d+/g,(digits,offset)=>{
+  if(digits.length>4||digits.length>1&&digits[0]==='0'||text[offset-1]==='.'||text[offset+digits.length]==='.')return digits;
+  if(digits==='0')return '零';
+  let result='',gap=false;
+  for(let i=0;i<digits.length;i++){
+   const digit=Number(digits[i]),place=digits.length-i-1;
+   if(!digit){if(result)gap=true;continue}
+   if(gap){result+='零';gap=false}
+   if(!(digit===1&&place===1&&!result))result+='零一二三四五六七八九'[digit];
+   result+=['','十','百','千'][place];
+  }
+  return result;
+ }));
+}
 function distance(a,b){let row=Array.from({length:b.length+1},(_,i)=>i);for(let i=0;i<a.length;i++){const next=[i+1];for(let j=0;j<b.length;j++)next.push(Math.min(next[j]+1,row[j+1]+1,row[j]+(a[i]===b[j]?0:1)));row=next}return row[b.length]}
 function phoneticMatch(expected,actual){
  // ASR may assign a lexical tone to an unstressed particle (了 -> 乐).
@@ -8,16 +26,16 @@ function phoneticMatch(expected,actual){
 }
 function selectTranscription(result){
  const candidates=[{method:result.method||'vad',segments:result.segments,phonemes:result.phonemes},...(result.alternatives||[])];
- const expected=normalize(result.normalizedExpected);
+ const expected=comparisonText(result.normalizedExpected);
  if(!expected||candidates.length<2)return result;
- const score=c=>distance(expected,normalize(c.segments.map(s=>s.normalizedText??s.text).join('')));
+ const score=c=>distance(expected,comparisonText(c.segments.map(s=>s.normalizedText??s.text).join('')));
  const selected=candidates.reduce((best,c)=>score(c)<score(best)?c:best);
  return {...result,method:selected.method,segments:selected.segments,phonemes:selected.phonemes,recognitionAttempts:candidates};
 }
 function compareSpeech(events,transcription){
   if(!Array.isArray(events))return {status:'unverifiable',reason:'旧任务没有结构化对白，不能自动判断原句和说话人物。',transcription};
   const spoken=events.filter(e=>e.type==='speech'),expected=spoken.map(e=>e.text).join(''),actual=transcription.segments.map(s=>s.text).join('');
-  const a=normalize(transcription.normalizedExpected??expected),b=normalize(transcription.segments.map(s=>s.normalizedText??s.text).join('')),edits=distance(a,b);
+  const a=comparisonText(transcription.normalizedExpected??expected),b=comparisonText(transcription.segments.map(s=>s.normalizedText??s.text).join('')),edits=distance(a,b);
   const homophones=edits>0&&a.length>0&&phoneticMatch(transcription.expectedPhonemes,transcription.phonemes);
   return {status:edits?(homophones?'pronunciation_match':'needs_review'):'text_match',expected,actual,edits,characterErrorRate:edits/Math.max(a.length,1),speakers:spoken.map(e=>({name:e.speakerName,delivery:e.delivery})),speakerIdentity:'not_verified',reason:homophones?'转写存在同音字或轻声助词歧义，转写音节可对应原句；这不是对实际声调的测量，人物和口型仍需观看确认。':edits?(a?'识别台词与剧本不同，请试听确认；识别本身也可能出错。':'此镜头应无对白，但识别到了声音文字，请试听确认。'):'文字识别一致；说话人物、口型和故事表达仍需观看确认。',transcription};
 }

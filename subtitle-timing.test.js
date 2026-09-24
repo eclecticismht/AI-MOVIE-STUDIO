@@ -5,6 +5,12 @@ test('captions follow actual speech onset and keep original punctuation',()=>{
   const r=alignSubtitles(events,{segments:[{start:2.22,end:3.22,text:'快了'}]},3.75);assert.deepEqual(r.cues,[{start:2.22,end:3.22,text:'快了。'}]);
 });
 test('wrong words never produce authoritative timed captions',()=>assert.equal(alignSubtitles(events,{segments:[{start:0,end:1,text:'你好'}]},4).status,'needs_review'));
+test('numeric speech matching preserves written digits and rejects ambiguous character timing',()=>{
+ const sameLength=alignSubtitles([{type:'speech',text:'今天我40了。'}],{segments:[{start:0.5,end:2,text:'今天我四十了'}]},4);
+ assert.deepEqual(sameLength.cues,[{start:0.5,end:2,text:'今天我40了。'}]);
+ const differentLength=alignSubtitles([{type:'speech',text:'10元。'}],{segments:[{start:0.5,end:2,text:'十元'}]},4);
+ assert.equal(differentLength.status,'needs_review');assert.deepEqual(differentLength.cues,[]);
+});
 test('multiple segments preserve punctuation and the gap between utterances',()=>{
   const r=alignSubtitles([{type:'speech',text:'你好。再见！'}],{segments:[{start:1,end:2,text:'你好'},{start:3,end:4,text:'再见'}]},4);assert.deepEqual(r.cues,[{start:1,end:2,text:'你好。'},{start:3,end:4,text:'再见！'}]);
 });
