@@ -9,7 +9,7 @@
     const transition=value.transition||'cut';if(!transitions.includes(transition))throw Error('不支持的转场');
     return {sourceDuration,trimIn,trimOut,gain:finite(Number(value.gain??1),0,1,'镜头音量'),transition,transitionDuration:transition==='cut'?0:finite(Number(value.transitionDuration??0.5),0.1,2,'转场时长'),versionId:value.versionId||null};
   }
-  function mix(value={}){return {master:finite(Number(value.master??1),0,1,'总音量'),musicVolume:finite(Number(value.musicVolume??0.25),0,1,'音乐音量'),musicOffset:finite(Number(value.musicOffset??0),0,600,'音乐起点'),musicFile:value.musicFile||''}}
+  function mix(value={}){return {master:finite(Number(value.master??1),0,1,'总音量'),musicVolume:finite(Number(value.musicVolume??0.25),0,1,'音乐音量'),musicOffset:finite(Number(value.musicOffset??0),0,600,'音乐起点'),musicFile:value.musicFile||'',normalizeDialogue:value.normalizeDialogue===true}}
   function build(shots,edit={}){
     const available=shots.filter(s=>!s.autoArchived).slice().sort((a,b)=>(a.sequence||0)-(b.sequence||0));
     const ids=new Set(available.map(s=>s.id)),order=[...new Set((edit.order||[]).filter(id=>ids.has(id)))];

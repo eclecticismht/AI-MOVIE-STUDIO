@@ -17,6 +17,13 @@ test('export sources cannot access arbitrary network or filesystem locations',()
  for(const url of ['https://example.com/video.mp4','file:///C:/secret','http://127.0.0.1:8188/view?filename=x.mp4&subfolder=../private','http://127.0.0.1:8188/view?filename=x.mp4&type=input','http://127.0.0.1:4173/connector-queue.json'])assert.throws(()=>sourceLocation(url));
  assert.ok(sourceLocation('http://127.0.0.1:8188/view?filename=test.mp4&type=output').url);
 });
+test('dialogue loudness normalization is optional and does not amplify silent ambience',()=>{
+ const {audioFilter}=require('./timeline-export-api'),speech={dialogueEvents:[{type:'speech',text:'好嘞，谢谢。'}]},c={gain:0.5,audioMode:'model'};
+ assert.equal(Edit.mix().normalizeDialogue,false);assert.equal(Edit.mix({normalizeDialogue:true}).normalizeDialogue,true);
+ assert.match(audioFilter(c,{normalizeDialogue:true},speech),/^loudnorm=I=-18:TP=-1.5:LRA=11,volume=0.5,/);
+ for(const [settings,shot,mode] of [[{},speech,'model'],[{normalizeDialogue:true},null,'model'],[{normalizeDialogue:true},speech,'replacement'],[{normalizeDialogue:true},{dialogueEvents:[]},'model']])assert.doesNotMatch(audioFilter({...c,audioMode:mode},settings,shot),/loudnorm/);
+ assert.match(audioFilter({...c,audioMode:'mute'},{normalizeDialogue:true},speech),/^volume=0,/);
+});
 test('edit persistence merges current project only and refuses a stale concurrent edit',()=>{
  const vm=require('node:vm'),fs=require('node:fs'),data={activeProjectId:'p',projects:[{id:'p',storyboardBatchId:'batch'},{id:'other'}],shots:shots.map(s=>({...s,projectId:'p',storyboardBatchId:'batch'}))};
  let stored=JSON.stringify(data),notice='';const context=vm.createContext({D:data,TimelineEdit:Edit,structuredClone,activeProject:()=>data.projects[0],tlMessage:m=>notice=m,tlMount(){},tlInspector(){},tlMedia(){},tlTools(){},go(){},window:{addEventListener(){}},localStorage:{getItem:()=>stored,setItem:(key,value)=>stored=value}});
