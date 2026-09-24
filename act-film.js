@@ -17,5 +17,12 @@
   return {selections,missing:selections.filter(x=>!x.source?.ready).map(x=>x.slot.shotId)};
  }
  function at(shots,time){return shots.find(s=>time>=s.start&&time<s.end)||shots.at(-1)}
- const api={groups,choose,at};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ActFilm=api;
+ function approval(act,version,pending=false){
+  if(pending)return {label:'正在保存…',disabled:true};
+  if(version?.id!==act?.versions.at(-1)?.id)return {label:'查看最新版后通过',disabled:false,latest:true,notice:'当前观看的是旧版，已有新版成片。请先切换并观看最新版，再确认通过。'};
+  if(version?.approvedAt)return {label:'本场已通过',disabled:true,notice:'本场通过状态已保存。'};
+  if(act?.status!=='ready')return {label:'等待新版成片完成',disabled:true,notice:'镜头正在更新，成片完成后即可确认通过。'};
+  return {label:'本场通过',disabled:false};
+ }
+ const api={groups,choose,at,approval};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ActFilm=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

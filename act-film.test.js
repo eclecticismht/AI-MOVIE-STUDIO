@@ -52,3 +52,23 @@ test('one-step review revision targets the selected shot and forwards the exact 
  vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(__dirname,'act-film-ui.js'),'utf8'),ctx);ctx.actFilmRedo({id:'act'},host);assert.deepEqual(calls,['pause','b','裤子保持纯黑色']);
  ctx.TL.busy=true;ctx.actFilmRedo({id:'act'},host);assert.equal(calls.length,3);
 });
+
+function reviewUi(fetch){
+ const vm=require('node:vm'),ctx={ActFilm:require('./act-film'),fetch,AbortSignal,tlRender:()=>{},tlTools:()=>{},renderMasters:()=>{},storyFlowOutline:()=>'',dispatchJob:()=>{},setInterval:()=>{}};
+ vm.createContext(ctx);vm.runInContext(fs.readFileSync(path.join(__dirname,'act-film-ui.js'),'utf8')+'\nthis.reviewState=AF;renderActFilms=()=>{};',ctx);return ctx;
+}
+test('old scene version has an actionable latest-version control instead of a silent disabled approval',async()=>{
+ const old={id:'old'},latest={id:'new'},act={id:'act',status:'ready',versions:[old,latest]};
+ const control=require('./act-film').approval(act,old);assert.equal(control.disabled,false);assert.equal(control.latest,true);assert.match(control.notice,/旧版/);
+ let requests=0,paused=false;const ctx=reviewUi(()=>requests++);ctx.reviewState.version='old';await ctx.actFilmApprove(act,old,{querySelector:()=>({pause:()=>paused=true})});assert.equal(paused,true);assert.equal(ctx.reviewState.version,null);assert.equal(requests,0);
+});
+test('scene approval shows pending, prevents duplicates, and applies persisted success',async()=>{
+ let resolve,calls=0;const version={id:'new'},act={id:'act',status:'ready',versions:[version]};
+ const ctx=reviewUi((url,options)=>{calls++;assert.equal(url,'/api/act-films/act/approve');assert.equal(JSON.parse(options.body).versionId,'new');return new Promise(r=>resolve=r)});ctx.reviewState.acts=[act];
+ const pending=ctx.actFilmApprove(act,version,{});assert.equal(ctx.reviewState.approving,'act');assert.match(require('./act-film').approval(act,version,true).label,/保存/);await ctx.actFilmApprove(act,version,{});assert.equal(calls,1);
+ resolve({ok:true,json:async()=>({act:{...act,versions:[{...version,approvedAt:'saved'}]}})});await pending;assert.equal(ctx.reviewState.approving,null);assert.equal(ctx.reviewState.acts[0].versions[0].approvedAt,'saved');assert.equal(require('./act-film').approval(ctx.reviewState.acts[0],ctx.reviewState.acts[0].versions[0]).label,'本场已通过');
+});
+test('failed scene approval remains visible and permits retry',async()=>{
+ const version={id:'new'},act={id:'act',status:'ready',versions:[version]},ctx=reviewUi(async()=>({ok:false,json:async()=>({error:'镜头已更新'})}));ctx.reviewState.acts=[act];
+ await ctx.actFilmApprove(act,version,{});assert.match(ctx.reviewState.reviewError,/镜头已更新/);assert.equal(ctx.reviewState.approving,null);assert.equal(version.approvedAt,undefined);
+});
