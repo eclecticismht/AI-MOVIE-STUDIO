@@ -1,3 +1,4 @@
 @echo off
 cd /d "%~dp0"
-node local-server.js
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-local-services.ps1"
+if errorlevel 1 pause

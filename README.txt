@@ -1,6 +1,18 @@
 AI MOVIE STUDIO Web v0.2 PROJECT COCKPIT
 
 For regular use, start START_LOCAL_SERVER.bat and open http://127.0.0.1:4173. Full functionality requires the local services and configured model runtimes.
+The launcher starts the web server and connector in hidden background processes,
+reuses healthy running services, and opens the site. Closing the launcher does not
+stop them. After restarting Windows, run the launcher again. ComfyUI is separate.
+Startup errors are saved under .runtime. For checks without opening a browser use
+powershell -NoProfile -File start-local-services.ps1 -NoBrowser.
+
+For wardrobe continuity, use a single current-costume character image for a scene,
+not a biography collage containing multiple ages and outfits. Existing generated
+videos need to be rendered again after changing references. Film retry revisions
+can replace an existing character image with characterReferenceFiles (asset ID to
+uploaded reference filename); first-frame shots must also replace or clear their
+opening frame, and continuation shots must be corrected through the prior shot.
 
 For browser automation and full interaction testing, double-click START_LOCAL_SERVER.bat,
 then open http://127.0.0.1:4173. The web server runs locally. DeepSeek screenplay/prompt generation sends the selected content to the configured text-model service. Local video rendering uses the H3 connector and ComfyUI.

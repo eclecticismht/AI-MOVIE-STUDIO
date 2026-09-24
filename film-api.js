@@ -184,6 +184,17 @@ function retryPlan(run,index,revision){
     if(original.firstFrame&&visible(events)!==visible(original.dialogueEvents))throw Error('首帧镜头的画内发声人物已改变，请回分镜重新确认人物位置后制作');
     replacement={...original,...(revision.cropBottomPercent!==undefined?{cropBottomPercent:Framing.validateBottomCrop(revision.cropBottomPercent)}:{}),...(revision.renderMode!==undefined?{renderMode:revision.renderMode,screenAssetId:revision.screenAssetId,screenSource:revision.screenSource,screenImagePercent:revision.screenImagePercent,screenCards:revision.screenCards??original.screenCards}:{}),prompt:revision.prompt,duration:revision.duration,subtitle:revision.subtitle,dialogueEvents:events,...(revision.firstFrame!==undefined?{firstFrame:validateFirstFrame(revision.firstFrame)}:{}),...(revision.audioMode!==undefined?{audioMode:revision.audioMode,audioAsset:revision.audioAsset}: {})};
   }
+  if(revision?.characterReferenceFiles!==undefined){
+    const files=revision.characterReferenceFiles;
+    if(!files||typeof files!=='object'||Array.isArray(files)||!Object.keys(files).length)throw Error('请选择需要替换的角色参考图');
+    for(const id of Object.keys(files))if(!(replacement.references||[]).some(r=>r.assetId===id&&r.kind==='characters'))throw Error('只能替换本镜已引用的角色参考图');
+    // I2VA uses only its opening frame; replacing metadata alone cannot change clothes.
+    if(original.firstFrame&&(revision.firstFrame===undefined||revision.firstFrame?.file===original.firstFrame.file))throw Error('更换角色造型时请同时更新或清除旧首帧');
+    if(original.continueFromShotId)throw Error('承接镜头请先修订前镜的角色造型');
+    replacement={...replacement,references:validateReferences(replacement.references.map(r=>Object.hasOwn(files,r.assetId)?{...r,file:files[r.assetId]}:r))};
+    // The browser's old asset fingerprint no longer describes these inputs.
+    delete replacement.sourceFingerprint;
+  }
   if(revision?.screenReferenceFile!==undefined){
     if(replacement.renderMode!=='screen'||replacement.screenSource==='text')throw Error('只有屏幕原图展示镜头可以替换展示图片');
     if(!(replacement.references||[]).some(r=>r.assetId===replacement.screenAssetId&&r.kind==='props'))throw Error('屏幕道具引用缺失');
