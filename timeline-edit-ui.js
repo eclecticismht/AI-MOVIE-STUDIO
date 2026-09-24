@@ -109,7 +109,7 @@ async function cutExport(){
     if(key!==cutKey()||JSON.stringify(cutSettings())!==baseline)throw Error('核对期间剪辑发生变化，请重新导出。');
     if(!cutSave(e=>{e.clips||={};clips.forEach((c,i)=>{const actual=durations[i];if(c.edit.trimIn>=actual-.1)throw Error('第 '+(i+1)+' 镜入点超过实际素材长度');e.clips[c.shot.id]={...e.clips[c.shot.id],sourceDuration:actual,trimOut:Math.min(c.edit.trimOut,actual)}})},false))return;
     clips=tlClips();tlTracks();
-    const plan={projectId:D.activeProjectId,title:activeProject().name+' · 剪辑版',mix:TimelineEdit.mix(cutSettings().mix),clips:clips.map((c,i)=>({shotId:c.shot.id,url:sources[i],...c.edit,versionId:tlMedia(c.shot)?.id,audioMode:c.shot.audioMode||'model',audioAsset:c.shot.audioAsset}))};
+    const plan={projectId:D.activeProjectId,title:activeProject().name+' · 剪辑版',mix:TimelineEdit.mix(cutSettings().mix),clips:clips.map((c,i)=>({shotId:c.shot.id,url:sources[i],...c.edit,versionId:tlMedia(c.shot)?.id,filmRunId:tlMedia(c.shot)?.filmRunId,audioMode:c.shot.audioMode||'model',audioAsset:c.shot.audioAsset}))};
     const r=await fetch('/api/timeline-export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(plan)}),out=await r.json();if(!r.ok)throw Error(out.error);CUT.exportId=out.id;sessionStorage.setItem('timeline-export:'+D.activeProjectId,out.id);tlMessage('剪辑版正在导出，使用现有视频，无需重新生成。');cutPollExport();
   }catch(e){tlMessage(e.message)}finally{CUT.exportPreparing=false}
 }

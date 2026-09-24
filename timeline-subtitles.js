@@ -10,10 +10,25 @@ function filmReference(value){
 }
 
 function sourceShot(clip,readRun){
- const ref=filmReference(clip.url);if(!ref)return null;
+ const ref=filmReference(clip.url);
+ // Preview versions may point straight to a ComfyUI file (including face
+ // refinement results). Keep their explicit film provenance instead of
+ // guessing a source run from the renderer's filename.
+ if(!ref){
+  if(!clip.filmRunId)return null;
+  if(!/^film_[a-f0-9]{16}$/.test(clip.filmRunId))throw Error('字幕来源版本无效');
+  const shot=readRun(clip.filmRunId)?.shots?.find(s=>s.shotId===clip.shotId&&sameVideo(s.videoUrl,clip.url));
+  if(!shot)throw Error('剪辑素材与原分镜字幕不匹配，请重新同步素材。');
+  return shot;
+ }
  const shot=readRun(ref.runId)?.shots?.[ref.index];
  if(!shot||shot.shotId!==clip.shotId)throw Error('剪辑素材与原分镜字幕不匹配，请重新同步素材。');
  return shot;
+}
+function sameVideo(a,b){
+ if(!a||!b)return false;
+ const normalize=value=>{const u=new URL(value,'http://127.0.0.1:4173');u.searchParams.sort();return u.href};
+ return normalize(a)===normalize(b);
 }
 
 function seconds(value){

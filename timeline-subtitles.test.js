@@ -47,3 +47,11 @@ test('silent and imported clips never invent subtitle text',()=>{
  assert.equal(result.cueCount,0);
  assert.match(result.ass,/PlayResX: 1280/);
 });
+test('direct renderer and face-refined outputs retain verified film provenance',()=>{
+ const id='film_0123456789abcdef',url='http://127.0.0.1:8188/view?filename=refined.mp4&subfolder=FaceRefine&type=output';
+ const s={...shot(),videoUrl:url},c={url,shotId:'s',filmRunId:id};
+ assert.equal(sourceShot(c,runId=>{assert.equal(runId,id);return {shots:[s]}}),s);
+ assert.equal(sourceShot({...c,url:'http://127.0.0.1:8188/view?type=output&subfolder=FaceRefine&filename=refined.mp4'},()=>({shots:[s]})),s);
+ assert.throws(()=>sourceShot({...c,url:url.replace('refined','unrelated')},()=>({shots:[s]})),/不匹配/);
+ assert.throws(()=>sourceShot({...c,filmRunId:'../private'},()=>{throw Error('unexpected read')}),/来源版本无效/);
+});
