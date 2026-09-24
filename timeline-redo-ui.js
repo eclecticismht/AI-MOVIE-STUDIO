@@ -27,7 +27,7 @@ function timelineOpenRedo(){
   let shots=[shot];try{shots=TimelineRedo.scope(D.shots,shot.id)}catch{}cutStop();
   document.getElementById('timelineRedoDialog')?.remove();
   const dialog=document.createElement('dialog');dialog.id='timelineRedoDialog';
-  dialog.innerHTML=`<h2>重做第 ${esc(shot.sequence)} 镜</h2><label for="timelineRedoRequest">需要怎样调整？</label><textarea id="timelineRedoRequest" rows="5" maxlength="10000" placeholder="例如：去掉多余的文字和声音，保留原有对白与环境音；把摩托车停在画面左边一点。"></textarea><p class="muted">直接描述想要的效果，AI 会自动修改画面、动作、对白、声音、时长及 H3 提示词，再重新制作，旧视频保留。${shots.length>1?'因尾帧承接，需要一起生成第 '+shots.map(s=>esc(s.sequence)).join('、')+' 镜。':'仅重新生成当前镜头。'}新要求优先于旧设定，支持去掉台词、改词或完全静音；本镜修改会保存记录。未保存的提示词也会作为修改依据。</p><p id="timelineRedoStatus" role="status"></p><div class="timeline-redo-buttons"><button class="btn" id="timelineRedoCancel">取消</button><button class="btn" id="timelineRedoSave">AI 修改并保存</button><button class="btn gold" id="timelineRedoSubmit">按要求重做</button></div>`;
+  dialog.innerHTML=`<h2>重做第 ${esc(shot.sequence)} 镜</h2><label for="timelineRedoRequest">需要怎样调整？</label><textarea id="timelineRedoRequest" rows="5" maxlength="10000" placeholder="例如：去掉多余的文字和声音，保留原有对白与环境音；把摩托车停在画面左边一点。"></textarea><p class="muted">直接描述想要的效果，AI 会自动修改画面、动作、对白、声音、时长及 H3 提示词，再重新制作，旧视频保留。${shots.length>1?'因尾帧承接，需要一起生成第 '+shots.map(s=>esc(s.sequence)).join('、')+' 镜。':'仅重新生成当前镜头。'}新要求优先于旧设定，支持去掉台词、改词或完全静音；本镜修改会保存记录。未保存的提示词也会作为修改依据。</p><p id="timelineRedoStatus" role="status"></p><div class="timeline-redo-buttons"><button class="btn" id="timelineRedoCancel">取消</button><button class="btn" id="timelineRedoSave">仅保存修改</button><button class="btn gold" id="timelineRedoSubmit">修改并重做</button></div>`;
   document.body.append(dialog);timelineRedoState={shot:structuredClone(shot),version:structuredClone(tlMedia(shot)),dialog,expected:JSON.stringify(shot),draftText:draft&&timelinePromptChanged(draft)?draft.text:null};
   dialog.querySelector('#timelineRedoCancel').onclick=()=>dialog.close();dialog.querySelector('#timelineRedoSubmit').onclick=()=>timelineSubmitRedo();dialog.querySelector('#timelineRedoSave').onclick=()=>timelineSubmitRedo(true);
   dialog.oncancel=e=>{if(TL.busy)e.preventDefault()};dialog.showModal();dialog.querySelector('textarea').focus();
@@ -73,8 +73,9 @@ async function timelineSubmitRedo(saveOnly=false){
   const saved=FilmSourceSync.replaceWithDependents(latest.data.shots,latest.s,next);latest.data.shots=saved.shots;
   localStorage.setItem('aimovie_data',JSON.stringify(latest.data));D.shots=saved.shots;f.shot=structuredClone(saved.shots.find(x=>x.id===s.id&&x.projectId===s.projectId));f.expected=JSON.stringify(f.shot);timelinePromptDrafts.delete(timelinePromptKey(s));
   message.textContent='新提示词已保存，正在提交生成…';
+  if(typeof registerActFilms==='function')await registerActFilms();
   const response=await fetch('/api/film',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(plan),signal:AbortSignal.timeout(30000)}),out=await response.json();if(!response.ok)throw Error(out.error||'提交失败，新提示词已保留');
-  filmRuns.push(out.run);f.dialog.close();tlMessage('已按修改要求开始重做；完成后自动接入预览，旧版本保留。');
+  filmRuns.push(out.run);f.dialog.close();tlMessage('已开始重做；完成后自动更新本场成片，旧版保留。');
  }catch(e){message.textContent=(f.revision?'AI 修改已就绪：'+f.revision.summary+'。':'')+e.message}
  finally{TL.busy=false;button.disabled=false;cancel.disabled=false;if(saveButton)saveButton.disabled=false;tlRender()}
 }

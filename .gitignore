@@ -6,6 +6,7 @@ local-connector.stderr.log
 comfy-test.stdout.log
 comfy-test.stderr.log
 film-runs/
+act-films/
 .runtime/
 
 audio-assets/

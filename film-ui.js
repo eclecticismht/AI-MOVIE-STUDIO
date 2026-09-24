@@ -70,6 +70,7 @@ async function startAutomaticFilm(sample=false,prepareOnly=false){
       for(const draft of batch.filter(s=>!['black','screen'].includes(s.renderMode))){const original=shots.find(s=>s.id===draft.shotId);if(!ShotPrompt.isStructured(original.prompt))draft.prompt=compileH3Prompt({...original,prompt:original.filmPrompt});}
     }
     if(prepareOnly){filmMessage='整批提示词已保存，可导出制作检查包核对；尚未启动视频渲染。';return;}
+    if(typeof registerActFilms==='function')await registerActFilms();
     const response=await fetch('/api/film',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(plan),signal:AbortSignal.timeout(30000)}),data=await response.json();if(!response.ok)throw Error(data.error);filmRuns.push(data.run);filmMessage='已启动，全部镜头完成后自动合成 MP4。';
   }catch(error){filmMessage=error.message}
   finally{filmStarting=false;renderEdit()}
