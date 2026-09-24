@@ -72,3 +72,13 @@ test('failed scene approval remains visible and permits retry',async()=>{
  const version={id:'new'},act={id:'act',status:'ready',versions:[version]},ctx=reviewUi(async()=>({ok:false,json:async()=>({error:'镜头已更新'})}));ctx.reviewState.acts=[act];
  await ctx.actFilmApprove(act,version,{});assert.match(ctx.reviewState.reviewError,/镜头已更新/);assert.equal(ctx.reviewState.approving,null);assert.equal(version.approvedAt,undefined);
 });
+
+test('generated act batches share the original review scope and select their own act',()=>{
+ const data={activeProjectId:'p',projects:[{id:'p',storyActs:{'script|original':{acts:[{id:'one',title:'First',shotIds:['a']},{id:'two',title:'Second',generatedBatchId:'generated',shotIds:['b']}]}}}],storyboardBatches:[{id:'original',projectId:'p'},{id:'generated',projectId:'p'}],shots:[{id:'a',projectId:'p',storyboardBatchId:'original'},{id:'b',projectId:'p',storyboardBatchId:'generated'}]};
+ const api=require('./act-film');assert.equal(api.context(data,'original').scopeKey,'original');assert.equal(api.context(data,'generated').scopeKey,'original');assert.equal(api.context(data,'generated').preferredActId,'two');
+});
+test('title images are local imported assets and persist through grouping sync and restart',async t=>{
+ const api=require('./act-film-api'),name='asset-'+require('node:crypto').randomBytes(32).toString('hex')+'.png',dir=path.join(__dirname,'assets','imported'),file=path.join(dir,name);fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(file,Buffer.from('89504e470d0a1a0a','hex'));t.after(()=>fs.unlinkSync(file));
+ const card={imageUrl:'/assets/imported/'+name,seconds:5};assert.deepEqual(api.titleCard(card),card);for(const bad of [{imageUrl:'https://example.com/title.png'},{imageUrl:'/assets/imported/../secret.png'},{...card,seconds:100}])assert.throws(()=>api.titleCard(bad));
+ const root=fixture(t),options={root,autoTick:false,sources:()=>[source('a'),source('b')],assemble:async plan=>({shots:[],warnings:[],hasTitle:!!plan.titleCard})},service=createService(options);await service.sync(input());const id=service.list('p')[0].id;await service.tick();service.setTitle(id,card);await service.sync(input());await service.tick();let state=service.list('p')[0];assert.equal(state.versions.length,2);assert.equal(state.versions[1].hasTitle,true);assert.deepEqual(createService(options).list('p')[0].plan.titleCard,card);service.setTitle(id,null);await service.tick();assert.equal(service.list('p')[0].versions.length,3);
+});

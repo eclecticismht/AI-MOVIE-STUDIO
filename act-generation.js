@@ -19,7 +19,7 @@
     if(state.parts[i])continue;io.notice(`2 / 3 · 生成本场场景与镜头 ${i+1}/${parts.length}`);
     let result,repair=state.repairs?.[i];
     for(let attempt=0;attempt<3;attempt++){
-     try{result=await io.request('/api/storyboard',{screenplay:parts[i].text,model,assets:state.prepared.assets,timing:{mode:'auto'},repair,notes:'只生成本段镜头。口头对白按每秒3字加1秒分配时长，每镜4至15秒，长对白按原文拆镜。'});break}catch(e){if(!e.repair)throw e;repair=e.repair;state.repairs||={};state.repairs[i]=repair;await checkpoint();if(attempt===2)throw e}
+     try{result=await io.request('/api/storyboard',{screenplay:parts[i].text,model,assets:state.prepared.assets,timing:{mode:'auto'},repair,notes:'只生成本段镜头。口头对白按每秒3字加1秒分配时长，每镜4至15秒，长对白按原文拆镜。原文指定的一镜到底、连续运镜与总时长必须保留；同一连续动作的画面、声音和片名说明不能逐段拆成重复镜头。片名使用后期资产，不交给视频模型生成文字。以下是当前场次原始制作要求，须与剧本一起遵守：\n'+story});break}catch(e){if(!e.repair)throw e;repair=e.repair;state.repairs||={};state.repairs[i]=repair;await checkpoint();if(attempt===2)throw e}
     }
     if(!result?.shots?.length||result.shots[0].continuePrevious)throw Error('本场分镜为空或首镜错误承接其他场次');
     state.parts[i]=result.shots;if(state.repairs)delete state.repairs[i];await checkpoint();

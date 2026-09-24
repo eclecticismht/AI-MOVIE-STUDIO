@@ -14,6 +14,13 @@ function validate(input){
   })};
  });
 }
+function titleCard(value){
+ if(value===null)return null;
+ if(!value||typeof value.imageUrl!=='string'||!/^\/assets\/imported\/asset-[a-f0-9]{64}\.(png|jpg|webp)$/.test(value.imageUrl))throw Error('请选择已导入的片名图片');
+ const seconds=Number(value.seconds??5);if(!Number.isFinite(seconds)||seconds<1||seconds>15)throw Error('片名显示时长须为1至15秒');
+ const file=path.join(__dirname,value.imageUrl);if(!fs.existsSync(file))throw Error('片名图片不存在，请重新导入');
+ return {imageUrl:value.imageUrl,seconds};
+}
 function loadSources(){
  const result=[];
  if(fs.existsSync(FILMS))for(const name of fs.readdirSync(FILMS)){
@@ -54,7 +61,9 @@ async function render(plan,selections,dir){
  await command(['-y','-f','concat','-safe','0','-i',path.join(dir,'concat.txt'),'-c','copy',path.join(dir,'joined.mp4')]);
  fs.writeFileSync(path.join(dir,'subtitles.ass'),require('./film-api').makeAss(shots));
  const ass=path.join(dir,'subtitles.ass').replace(/\\/g,'/').replace(/:/g,'\\:').replace(/'/g,"\\'");
- await command(['-y','-i',path.join(dir,'joined.mp4'),'-vf',`ass=filename='${ass}'`,'-c:v','libx264','-preset','fast','-crf','20','-c:a','copy','-movflags','+faststart',path.join(dir,'movie.mp4')]);
+ const card=plan.titleCard&&titleCard(plan.titleCard),offset=Math.max(0,time-(card?.seconds||0));
+ const filter=card?['-loop','1','-i',path.join(__dirname,card.imageUrl),'-filter_complex',`[0:v]ass=filename='${ass}'[base];[1:v]scale=1024:400:force_original_aspect_ratio=decrease,format=rgba,fade=t=in:st=${offset}:d=1:alpha=1[title];[base][title]overlay=(W-w)/2:(H-h)/2:enable='gte(t,${offset})':shortest=1[v]`,'-map','[v]','-map','0:a:0','-t',String(time)]:['-vf',`ass=filename='${ass}'`];
+ await command(['-y','-i',path.join(dir,'joined.mp4'),...filter,'-c:v','libx264','-preset','fast','-crf','20','-c:a','copy','-movflags','+faststart',path.join(dir,'movie.mp4')]);
  return {shots:shots.map(s=>({shotId:s.shotId,label:s.label,start:s.start,end:s.end})),duration:time,warnings};
 }
 function signatureFor(plan,selections){return hash([plan,selections.map(({source:s})=>[s.shot.videoUrl||s.id,s.shot.audioMode,s.shot.audioAsset,s.shot.cropBottomPercent,s.shot.subtitle,s.shot.dialogueEvents,s.shot.screenCards,s.shot.subtitleTiming])])}
@@ -66,6 +75,7 @@ function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=t
  async function sync(input){
   const plans=validate(input),ids=new Set();
   for(const plan of plans){const id='act_'+hash([plan.projectId,plan.scopeKey,plan.actId]).slice(0,32);ids.add(id);const previous=states.get(id),s=previous||{id,versions:[]};
+   if(s.plan?.titleCard)plan.titleCard=s.plan.titleCard;
    if(JSON.stringify(s.plan)!==JSON.stringify(plan)){s.plan=plan;s.failedSignature=null;s.status='waiting'}s.enabled=true;states.set(id,s);save(s);
   }
   for(const s of states.values())if(s.plan.projectId===input.projectId&&s.plan.scopeKey===input.scopeKey&&!ids.has(s.id)){s.enabled=false;save(s)}
@@ -92,7 +102,8 @@ function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=t
  async function approve(id,versionId){const s=states.get(id),v=s?.versions.at(-1);if(!s?.enabled||s.status!=='ready'||v?.id!==versionId)throw Error('场次已更新，请先观看最新成片');const fresh=choose(s.plan,await sources());if(!s.enabled||s.status!=='ready'||s.versions.at(-1)!==v||fresh.missing.length||signatureFor(s.plan,fresh.selections)!==v.signature)throw Error('镜头已更新，请先观看最新成片');v.approvedAt=new Date().toISOString();s.message='本场已通过';save(s);return publicState(s)}
  function retry(id){const s=states.get(id);if(!s?.enabled)throw Error('场次不存在');s.failedSignature=null;save(s);if(autoTick)void tick().catch(()=>{})}
  function file(id,version){const s=states.get(id);if(!s?.versions.some(v=>v.id===version))throw Error('成片版本不存在');return path.join(root,id,version,'movie.mp4')}
- return {sync,list,tick,approve,retry,file};
+ function setTitle(id,value){const s=states.get(id);if(!s?.enabled)throw Error('场次不存在');const card=titleCard(value);if(card)s.plan.titleCard=card;else delete s.plan.titleCard;s.failedSignature=null;s.status='waiting';s.message='片名设置已保存，镜头齐全后自动更新成片';save(s);if(autoTick)void tick().catch(()=>{});return publicState(s)}
+ return {sync,list,tick,approve,retry,file,setTitle};
 }
 function createActFilmApi(){
  const service=createService();const timer=setInterval(()=>service.tick().catch(()=>{}),5000);timer.unref();
@@ -104,9 +115,9 @@ function createActFilmApi(){
    const url=new URL(req.url,'http://localhost');
    if(pathname==='/api/act-films'&&req.method==='GET'){send(200,{acts:service.list(url.searchParams.get('projectId'),url.searchParams.get('scopeKey'))});return true}
    if(pathname==='/api/act-films'&&req.method==='POST'){send(200,{acts:await service.sync(JSON.parse(await require('./request-body').readUtf8(req,400000)))});return true}
-   const match=/^\/api\/act-films\/(act_[a-f0-9]{32})\/(?:(v_[a-f0-9]{24})\/video|(approve|retry))$/.exec(pathname);
+   const match=/^\/api\/act-films\/(act_[a-f0-9]{32})\/(?:(v_[a-f0-9]{24})\/video|(approve|retry|title))$/.exec(pathname);
    if(!match)throw Error('场次接口不存在');
-   if(match[3]&&req.method==='POST'){const body=JSON.parse(await require('./request-body').readUtf8(req,2000)||'{}');send(200,match[3]==='approve'?{act:await service.approve(match[1],body.versionId)}:(service.retry(match[1]),{ok:true}));return true}
+   if(match[3]&&req.method==='POST'){const body=JSON.parse(await require('./request-body').readUtf8(req,2000)||'{}');send(200,match[3]==='title'?{act:service.setTitle(match[1],body.titleCard)}:match[3]==='approve'?{act:await service.approve(match[1],body.versionId)}:(service.retry(match[1]),{ok:true}));return true}
    if(match[2]&&['GET','HEAD'].includes(req.method)){
     const file=service.file(match[1],match[2]),size=fs.statSync(file).size,range=/^bytes=(\d+)-(\d*)$/.exec(req.headers.range||''),start=range?+range[1]:0,end=range?.[2]?Math.min(+range[2],size-1):size-1;
     if(start>end||start>=size){res.writeHead(416,{'Content-Range':`bytes */${size}`});res.end();return true}
@@ -115,4 +126,4 @@ function createActFilmApi(){
   }catch(e){if(!res.headersSent)send(400,{error:e.message});else res.destroy()}return true;
  };
 }
-module.exports={validate,loadSources,render,createService,createActFilmApi};
+module.exports={titleCard,validate,loadSources,render,createService,createActFilmApi};

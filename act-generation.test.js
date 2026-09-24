@@ -36,3 +36,7 @@ test('act progress stays in the active expanded panel after rerender',()=>{
  vm.runInContext("actGenerationRender('a');actGenerationNotice({id:'p'},'a','分镜生成失败')",ctx);
  assert.equal(rendered,1);assert.equal(panel.open,true);assert.equal(el.textContent,'分镜生成失败');
 });
+
+test('storyboard receives original continuous-camera and timing requirements beyond the screenplay',async()=>{
+ const h=harness(),request=h.io.request,story='只用一个15秒镜头，一镜到底，穿门后拉到夜景';h.io.request=async(url,body)=>{if(url==='/api/storyboard'){assert.ok(body.notes.includes(story));assert.match(body.notes,/连续运镜/)}return request(url,body)};await run(story,'model',null,h.io);
+});
