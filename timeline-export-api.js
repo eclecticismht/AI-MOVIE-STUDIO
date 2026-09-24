@@ -1,5 +1,6 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{spawn}=require('node:child_process'),{Readable,Transform}=require('node:stream'),{pipeline}=require('node:stream/promises');
 const Edit=require('./timeline-edit'),{resolveAudioAsset}=require('./audio-assets');
+const Subtitles=require('./timeline-subtitles');
 const ROOT=path.join(__dirname,'timeline-exports'),FFMPEG=process.env.FFMPEG_PATH||'C:\\AI\\Comfy UI\\ComfyUI\\.venv\\Lib\\site-packages\\imageio_ffmpeg\\binaries\\ffmpeg-win-x86_64-v7.1.exe';
 const running=new Set();
 function sourceLocation(value){
@@ -33,6 +34,7 @@ function save(run){fs.mkdirSync(ROOT,{recursive:true});fs.writeFileSync(path.joi
 async function work(run){
   running.add(run.id);const dir=path.join(ROOT,run.id);try{
     run.status='rendering';save(run);
+    const captionShots=run.plan.clips.map(clip=>Subtitles.sourceShot(clip,id=>JSON.parse(fs.readFileSync(path.join(__dirname,'film-runs',id,'run.json'),'utf8'))));
     for(const [i,c] of run.plan.clips.entries()){
       run.message='整理镜头 '+(i+1)+' / '+run.plan.clips.length;save(run);const file=path.join(dir,'source-'+i+'.mp4');await download(sourceLocation(c.url),file);
       let info;try{await command(['-hide_banner','-i',file]);throw Error('无法检查视频')}catch(e){info=e.log||''}
@@ -46,7 +48,13 @@ async function work(run){
     const filters=clips.flatMap((_,i)=>[`[${i}:v]settb=AVTB,setpts=PTS-STARTPTS,fps=24[v${i}]`,`[${i}:a]atrim=duration=${clips[i].duration},asetpts=PTS-STARTPTS[a${i}]`]).concat(graph.filters),mix=run.plan.mix;
     if(mix.musicFile){inputs.push('-stream_loop','-1','-ss',String(mix.musicOffset),'-i',resolveAudioAsset(mix.musicFile));filters.push(`[${clips.length}:a]atrim=duration=${graph.duration},asetpts=PTS-STARTPTS,volume=${mix.musicVolume}[music]`,`[${graph.audio}][music]amix=inputs=2:duration=first:normalize=0,volume=${mix.master},alimiter=limit=0.95:level=false:latency=true[mixed]`)}
     else filters.push(`[${graph.audio}]volume=${mix.master},alimiter=limit=0.95:level=false:latency=true[mixed]`);
-    await command(['-y',...inputs,'-filter_complex_threads','1','-filter_complex',filters.join(';'),'-map','['+graph.video+']','-map','[mixed]','-t',String(graph.duration),'-c:v','libx264','-preset','fast','-crf','20','-pix_fmt','yuv420p','-c:a','aac','-movflags','+faststart',path.join(dir,'movie.mp4')]);
+    const captions=Subtitles.timelineAss(run.plan.clips,captionShots);let video=graph.video;
+    if(captions.cueCount){
+      const file=path.join(dir,'subtitles.ass');fs.writeFileSync(file,captions.ass);
+      const escaped=file.replace(/\\/g,'/').replace(/:/g,'\\:').replace(/'/g,"\\'");
+      filters.push('['+video+"]ass='"+escaped+"'[captioned]");video='captioned';
+    }
+    await command(['-y',...inputs,'-filter_complex_threads','1','-filter_complex',filters.join(';'),'-map','['+video+']','-map','[mixed]','-t',String(graph.duration),'-c:v','libx264','-preset','fast','-crf','20','-pix_fmt','yuv420p','-c:a','aac','-movflags','+faststart',path.join(dir,'movie.mp4')]);
     run.status='complete';run.duration=graph.duration;run.url='/timeline-exports/'+run.id+'/movie.mp4';run.message='剪辑版已导出，请审阅转场、声音和对白完整性。';save(run);
   }catch(e){run.status='failed';run.message=e.message;save(run)}finally{running.delete(run.id)}
 }
