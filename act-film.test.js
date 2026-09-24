@@ -82,3 +82,11 @@ test('title images are local imported assets and persist through grouping sync a
  const card={imageUrl:'/assets/imported/'+name,seconds:5};assert.deepEqual(api.titleCard(card),card);for(const bad of [{imageUrl:'https://example.com/title.png'},{imageUrl:'/assets/imported/../secret.png'},{...card,seconds:100}])assert.throws(()=>api.titleCard(bad));
  const root=fixture(t),options={root,autoTick:false,sources:()=>[source('a'),source('b')],assemble:async plan=>({shots:[],warnings:[],hasTitle:!!plan.titleCard})},service=createService(options);await service.sync(input());const id=service.list('p')[0].id;await service.tick();service.setTitle(id,card);await service.sync(input());await service.tick();let state=service.list('p')[0];assert.equal(state.versions.length,2);assert.equal(state.versions[1].hasTitle,true);assert.deepEqual(createService(options).list('p')[0].plan.titleCard,card);service.setTitle(id,null);await service.tick();assert.equal(service.list('p')[0].versions.length,3);
 });
+
+test('late sound verification updates scene warnings without rerendering the same footage',async t=>{
+ const data=[source('a'),source('b')];let count=0;const service=createService({root:fixture(t),autoTick:false,sources:()=>data,assemble:async()=>{count++;return {shots:[],warnings:[{message:'pending'}]}}});await service.sync({...input(),acts:input().acts.slice(0,1)});await service.tick();const id=service.list('p')[0].versions[0].id;for(const s of data)s.shot.speechCheck={status:'text_match'};await service.tick();assert.equal(count,1);assert.equal(service.list('p')[0].versions[0].id,id);assert.deepEqual(service.list('p')[0].versions[0].warnings,[]);
+});
+
+test('scene waiting state reports ongoing shot rendering instead of suggesting nothing has started',async t=>{
+ const data=[{...source('a','2026-09-24',false),status:'rendering',progress:{percent:48}},source('b')];const service=createService({root:fixture(t),autoTick:false,sources:()=>data,assemble:async()=>{throw Error('must not compose yet')}});await service.sync(input());await service.tick();assert.match(service.list('p')[0].message,/48%/);assert.equal(service.list('p')[0].versions.length,0);
+});

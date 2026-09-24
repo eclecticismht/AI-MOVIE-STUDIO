@@ -28,7 +28,7 @@ function loadSources(){
   try{const run=JSON.parse(fs.readFileSync(path.join(FILMS,name,'run.json'),'utf8'));if(run.actReview)continue;
    for(const [i,shot] of run.shots.entries()){
     const file=path.join(FILMS,name,`clip-${i}.mp4`);
-    result.push({id:name+':'+i,projectId:run.projectId,createdAt:run.createdAt||'',ready:!!shot.ready&&fs.existsSync(file),file,shot});
+    result.push({id:name+':'+i,projectId:run.projectId,createdAt:run.createdAt||'',status:run.status,progress:run.current?.index===i+1?run.current.progress:null,ready:!!shot.ready&&fs.existsSync(file),file,shot});
    }
   }catch{}
  }
@@ -66,6 +66,7 @@ async function render(plan,selections,dir){
  await command(['-y','-i',path.join(dir,'joined.mp4'),...filter,'-c:v','libx264','-preset','fast','-crf','20','-c:a','copy','-movflags','+faststart',path.join(dir,'movie.mp4')]);
  return {shots:shots.map(s=>({shotId:s.shotId,label:s.label,start:s.start,end:s.end})),duration:time,warnings};
 }
+function reviewWarnings(selections){return selections.flatMap(({slot,source},i)=>require('./film-quality').passed(source.shot.speechCheck)?[]:[{index:i+1,shotId:slot.shotId,message:source.shot.speechCheck?.reason||'声音尚未核对，请观看确认'}])}
 function signatureFor(plan,selections){return hash([plan,selections.map(({source:s})=>[s.shot.videoUrl||s.id,s.shot.audioMode,s.shot.audioAsset,s.shot.cropBottomPercent,s.shot.subtitle,s.shot.dialogueEvents,s.shot.screenCards,s.shot.subtitleTiming])])}
 function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=true}={}){
  const states=new Map();let ticking=false;
@@ -86,9 +87,9 @@ function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=t
   if(ticking)return;ticking=true;
   try{const all=await sources();for(const state of states.values()){
    if(!state.enabled)continue;const plan=structuredClone(state.plan),selected=choose(plan,all);state.missing=selected.missing;
-   if(selected.missing.length){state.status='waiting';state.message=`等待 ${selected.missing.length} 个镜头，齐全后自动合成`;save(state);continue}
+   if(selected.missing.length){state.status='waiting';const active=selected.selections.find(x=>!x.source?.ready&&x.source?.status==='rendering');state.message=active?`镜头正在制作${Number.isFinite(active.source.progress?.percent)?' · '+active.source.progress.percent+'%':''}，完成后自动合成本场`:`等待 ${selected.missing.length} 个镜头，齐全后自动合成`;save(state);continue}
    const signature=signatureFor(plan,selected.selections);
-   const latest=state.versions.at(-1);if(latest?.signature===signature){state.status='ready';state.message=latest.approvedAt?'本场已通过':'本场成片已生成，待审片';save(state);continue}
+   const latest=state.versions.at(-1);if(latest?.signature===signature){latest.warnings=reviewWarnings(selected.selections);state.status='ready';state.message=latest.approvedAt?'本场已通过':'本场成片已生成，待审片';save(state);continue}
    if(state.failedSignature===signature)continue;
    state.status='assembling';state.message='镜头已齐，正在自动合成本场成片';save(state);
    const versionId='v_'+crypto.randomBytes(12).toString('hex'),dir=path.join(root,state.id,versionId);
