@@ -51,3 +51,5 @@ test('unstressed particles tolerate lexical ASR tone spelling but never a missin
  assert.equal(compareSpeech(events,{...base,phonemes:['kuai4','le4','shi4','duo1','xiao3']}).status,'needs_review');
  assert.equal(compareSpeech(events,{...base,phonemes:['kuai4','shi4','duo1','shao3']}).status,'needs_review');
 });
+
+test('television news preserves decimal precision and matches digit-spoken years',()=>{for(const [expected,actual] of [['2024年国内出游14.19亿人次','二零二四年国内出游十四点一九亿人次'],['1984年','一九八四年'],['0.05','零点零五']])assert.equal(compareSpeech([{type:'speech',text:expected}],{segments:[{text:actual}]}).status,'text_match');for(const actual of ['十四点九一','十四点一','一千四百一十九'])assert.equal(compareSpeech([{type:'speech',text:'14.19'}],{segments:[{text:actual}]}).status,'needs_review');assert.equal(compareSpeech([{type:'speech',text:'2024年'}],{segments:[{text:'二零二五年'}]}).status,'needs_review')});

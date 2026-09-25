@@ -57,6 +57,7 @@ async function actFilmApprove(act,version,host){
  if(control.disabled)return;
  AF.approving=act.id;AF.reviewError='';AF.reviewEpoch++;renderActFilms();
  try{
+  if(typeof workspaceFlush==='function')await workspaceFlush();
   await registerActFilms();
   const response=await fetch(`/api/act-films/${act.id}/approve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({versionId:version.id}),signal:AbortSignal.timeout(15000)}),out=await response.json();
   if(!response.ok)throw Error(out.error||'保存失败，请重试');

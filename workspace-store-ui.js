@@ -2,7 +2,7 @@
 const workspaceSave={revision:null,ready:false,busy:false,pending:null,conflict:false,message:'正在核对磁盘备份…',timer:null};
 function workspaceStatus(message){workspaceSave.message=message;let el=document.getElementById('workspaceSaveStatus');if(!el){el=document.createElement('aside');el.id='workspaceSaveStatus';el.setAttribute('role','status');el.style.cssText='padding:8px 18px;background:#182332;color:#d8e6ef;font-size:13px;position:sticky;top:0;z-index:90';document.body.prepend(el)}el.textContent=message;
  if(workspaceSave.conflict){const download=document.createElement('button');download.className='btn';download.textContent='下载本页备份';download.onclick=()=>{const a=document.createElement('a'),url=URL.createObjectURL(new Blob([ProjectBackup.encode(D)],{type:'application/json'}));a.href=url;a.download='AI_MOVIE_STUDIO_conflict_'+Date.now()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};el.append(' ',download);
- const load=document.createElement('button');load.className='btn';load.textContent='载入磁盘版本';load.onclick=workspaceLoadDisk;el.append(' ',load);
+ const load=document.createElement('button');load.className='btn';load.textContent='备份本页并载入磁盘版本';load.onclick=workspaceLoadDisk;el.append(' ',load);
  const keep=document.createElement('button');keep.className='btn';keep.textContent='保留本页并另存磁盘快照';keep.onclick=workspaceKeepLocal;el.append(' ',keep);}
 }
 function workspaceChanged(value){workspaceSave.pending=value;if(workspaceSave.conflict)return;workspaceStatus('已保存在浏览器 · 正在写入磁盘…');clearTimeout(workspaceSave.timer);workspaceSave.timer=setTimeout(workspaceFlush,350)}
@@ -20,8 +20,9 @@ async function workspaceFlush(){
 async function workspaceReadDisk(){const r=await fetch('/api/workspace',{signal:AbortSignal.timeout(15000)}),out=await r.json();if(!r.ok)throw Error(out.error||'无法读取磁盘项目');return out}
 async function workspaceLoadDisk(){
  if(typeof editingShotId!=='undefined'&&editingShotId){workspaceStatus('请先保存分镜编辑内容，再载入磁盘版本');return}
- if(!confirm('载入会替换本页项目数据。请先点击“下载本页备份”保存当前内容；继续？'))return;
- try{const out=await workspaceReadDisk();if(!out.data)throw Error('磁盘尚无项目');globalThis.localStorage.setItem('aimovie_before_disk_restore',ProjectBackup.encode(D));localStorage.accept(JSON.stringify(out.data));location.reload()}catch(error){workspaceStatus(error.message)}
+ // The explicit restore button is the confirmation; avoid a blocking browser modal.
+ const backup=document.createElement('a'),recoveryUrl=URL.createObjectURL(new Blob([ProjectBackup.encode(D)],{type:'application/json'}));backup.href=recoveryUrl;backup.download='AI_MOVIE_STUDIO_before_disk_restore_'+Date.now()+'.json';backup.click();setTimeout(()=>URL.revokeObjectURL(recoveryUrl),1000);
+ try{const out=await workspaceReadDisk();if(!out.data)throw Error('磁盘尚无项目');localStorage.accept(JSON.stringify(out.data));location.reload()}catch(error){workspaceStatus(error.message)}
 }
 async function workspaceKeepLocal(){
  try{const out=await workspaceReadDisk();workspaceSave.revision=out.revision;workspaceSave.conflict=false;workspaceSave.pending=JSON.stringify(D);localStorage.accept(workspaceSave.pending);workspaceSave.ready=true;await workspaceFlush()}catch(error){workspaceStatus(error.message)}

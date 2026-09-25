@@ -41,7 +41,7 @@ function splitSavedShot(id){
       if(!scene||!part.action||!part.visual||!Number.isFinite(dur)||dur<4||dur>15)throw Error('每段需选择场景、填写行动和画面，并设置 4–15 秒');
       const retained=new Set([...(source.characterIds||[]),...(source.propIds||[]),scene.id]);
       const copy={...source,id:uid('SH'),parentShotId:source.id,scene:scene.name,sceneIds:[scene.id],script:part.action,visual:part.visual,desc:part.visual,dur,status:'待制作',prompt:'',assetStates:Object.fromEntries(Object.entries(source.assetStates||{}).filter(([key])=>retained.has(key)))};
-      for(const key of ['continueFromShotId','filmPrompt','filmPromptSource','filmPromptVersion','autoArchived','videoUrl','firstFrameUrl','firstFrameProvenance','firstFrameSpeakerPosition','firstFrameIntent','localFrameJobId','localFrameResult','localFrameSource','audioAsset'])delete copy[key];if(copy.audioMode==='replacement')copy.audioMode='model';return copy;
+      for(const key of ['continueFromShotId','filmPrompt','filmPromptSource','filmPromptVersion','autoArchived','videoUrl','firstFrameUrl','firstFrameProvenance','firstFrameSpeakerPosition','firstFrameIntent','localFrameJobId','localFrameResult','localFrameSource','audioAsset'])delete copy[key];if(['replacement','overlay','voiceover'].includes(copy.audioMode))copy.audioMode='model';return copy;
     });
     const nextShots=D.shots.flatMap(s=>s===source?[{...s,autoArchived:true},...children]:[s]);
     let sequence=0;const shots=nextShots.map(s=>s.projectId===source.projectId&&s.storyboardBatchId===source.storyboardBatchId&&!s.autoArchived?{...s,sequence:++sequence}:s);

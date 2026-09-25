@@ -5,7 +5,7 @@ async function importShotAmbience(input,target){
  const dataUrl=data.replace(/^data:[^;]*;/,'data:audio/'+(/mp3$/i.test(file.name)?'mpeg':'wav')+';');
  const r=await fetch('/api/audio-assets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dataUrl})}),out=await r.json();if(!r.ok)throw Error(out.error);
  if(document.getElementById(target)!==field||revision&&filmRevision!==revision)return;field.value=out.file;if(revision)revision.audioAsset=out.file;
- status.textContent='已导入：'+file.name+'。保存后生效，请试听确认无对白。';
+ status.textContent='已导入：'+file.name+'。保存后生效，请试听并核对所选声音模式。';
  }catch(e){status.textContent=e.message}
 }
 

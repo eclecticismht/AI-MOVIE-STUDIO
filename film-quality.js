@@ -1,10 +1,10 @@
 const {compareSpeech,transcribe}=require('./speech-audit');
 const {alignSubtitles}=require('./subtitle-timing');
-async function checkShot(shot,file,model,recognize=transcribe){
+async function checkShot(shot,file,model,recognize=transcribe,resolveVoice=require('./audio-assets').resolveAudioAsset){
  if(['black','screen'].includes(shot.renderMode)||shot.audioMode==='mute'||shot.audioMode==='replacement')return {status:'not_applicable',reason:'成片音轨不采用模型声音。'};
  try{
   const expected=(shot.dialogueEvents||[]).filter(e=>e.type==='speech').map(e=>e.text).join('');
-  const transcription=await recognize(file,expected,model);
+  const transcription=await recognize(shot.audioMode==='voiceover'?resolveVoice(shot.audioAsset):file,expected,model);
   const result=compareSpeech(shot.dialogueEvents,transcription);
   if(['text_match','pronunciation_match'].includes(result.status)&&expected)shot.subtitleTiming=alignSubtitles(shot.dialogueEvents,transcription,(17*Math.round((shot.duration*24-5)/17)+5)/24);
   return result;

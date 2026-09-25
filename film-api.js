@@ -30,7 +30,7 @@ function validatePlan(input){
     if((s.references||[]).some(r=>['images','videos'].includes(r.kind))&&(s.firstFrame||s.continueFromShotId||['black','screen'].includes(s.renderMode)))throw Error('上传参考素材不能与首帧、尾帧承接或本地合成同时使用');
     if(s.renderMode!==undefined&&!['model','black','screen'].includes(s.renderMode))throw Error('镜头制作方式无效');
     Framing.validateBottomCrop(s.cropBottomPercent);
-    if(s.renderMode==='black'&&(['replacement','overlay'].includes(s.audioMode)||s.firstFrame||(s.dialogueEvents||[]).length||(s.screenCards||[]).length||(s.references||[]).length||s.subtitle?.trim()))throw Error('纯黑静音镜头不能附带对白、文字卡或参考图');
+    if(s.renderMode==='black'&&(['replacement','overlay','voiceover'].includes(s.audioMode)||s.firstFrame||(s.dialogueEvents||[]).length||(s.screenCards||[]).length||(s.references||[]).length||s.subtitle?.trim()))throw Error('纯黑静音镜头不能附带对白、文字卡或参考图');
     if(!Number.isFinite(s.duration)||s.duration<4||s.duration>15)throw Error('每镜时长必须在 4–15 秒之间。');
     if(![s.width,s.height].every(n=>Number.isInteger(n)&&n>=32&&n<=8192&&n%32===0))throw Error('生成宽高必须是 32 的整数倍。');
     const dialogueEvents=s.dialogueEvents?DialogueContract.validateEvents(s.dialogueEvents):undefined;if(dialogueEvents)DialogueContract.bindDialogue(s.prompt,dialogueEvents,s.duration,s.references||[]);
@@ -45,8 +45,9 @@ function validatePlan(input){
       const identity=refs=>JSON.stringify(validateReferences(refs).map(r=>[r.assetId,r.kind,r.file]).sort((a,b)=>a[0].localeCompare(b[0])));
       if(identity(s.references)!==identity(input.shots[index-1].references))throw Error('承接镜头的参考资产或图片已改变，请使用独立镜头生成新画面');
     }
+    if(s.audioMode==='voiceover'&&require('./audio-assets').duration(s.audioAsset)>(17*Math.round((s.duration*24-5)/17)+5)/24+0.04)throw Error('独立画外声长于镜头，请延长镜头或分段，避免截断播报');
     if(s.sourceFingerprint!==undefined&&!/^[a-f0-9]{64}$/.test(s.sourceFingerprint))throw Error('来源校验信息无效');
-    return {faceRefineMode:require('./face-refine').mode(s.faceRefineMode),cropBottomPercent:Framing.validateBottomCrop(s.cropBottomPercent),...(s.sourceFingerprint?{sourceFingerprint:s.sourceFingerprint}:{}),...(s.continueFromShotId?{continueFromShotId:s.continueFromShotId,continuitySpeakerPosition:s.continuitySpeakerPosition}:{}),firstFrame:validateFirstFrame(s.firstFrame),...(['replacement','overlay'].includes(s.audioMode)?{audioAsset:(resolveAudioAsset(s.audioAsset),s.audioAsset)}:{}),audioMode:ShotAudio.validate(s.audioMode,dialogueEvents,s.audioAsset),...(s.renderMode==='black'?{renderMode:'black'}:{}),...(screen?{renderMode:'screen',...screen}:{}),screenCards:ScreenCards.validate(s.screenCards||[],s.sourceExcerpt),sourceExcerpt:typeof s.sourceExcerpt==='string'?s.sourceExcerpt.slice(0,30000):'',...(dialogueEvents?{dialogueEvents}:{}),references:validateReferences(s.references),shotId:s.shotId,sequence:index+1,prompt:s.prompt,duration:s.duration,width:s.width,height:s.height,subtitle:typeof s.subtitle==='string'?s.subtitle.slice(0,5000):''};
+    return {faceRefineMode:require('./face-refine').mode(s.faceRefineMode),cropBottomPercent:Framing.validateBottomCrop(s.cropBottomPercent),...(s.sourceFingerprint?{sourceFingerprint:s.sourceFingerprint}:{}),...(s.continueFromShotId?{continueFromShotId:s.continueFromShotId,continuitySpeakerPosition:s.continuitySpeakerPosition}:{}),firstFrame:validateFirstFrame(s.firstFrame),...(['replacement','overlay','voiceover'].includes(s.audioMode)?{audioAsset:(resolveAudioAsset(s.audioAsset),s.audioAsset)}:{}),audioMode:ShotAudio.validate(s.audioMode,dialogueEvents,s.audioAsset),...(s.renderMode==='black'?{renderMode:'black'}:{}),...(screen?{renderMode:'screen',...screen}:{}),screenCards:ScreenCards.validate(s.screenCards||[],s.sourceExcerpt),sourceExcerpt:typeof s.sourceExcerpt==='string'?s.sourceExcerpt.slice(0,30000):'',...(dialogueEvents?{dialogueEvents}:{}),references:validateReferences(s.references),shotId:s.shotId,sequence:index+1,prompt:s.prompt,duration:s.duration,width:s.width,height:s.height,subtitle:typeof s.subtitle==='string'?s.subtitle.slice(0,5000):''};
   });
   return {projectId:input.projectId,title:input.title.slice(0,120),shots};
 }
@@ -114,7 +115,7 @@ async function work(run){
         if(shot.continuitySpeakerPosition)firstFrame.speakerPosition=shot.continuitySpeakerPosition;
         shot.continuityFrame={...firstFrame,fromShotId:previous.shotId,fromJobId:previous.jobId};save(run);
       }
-      await connector('/jobs',{id:jobId,projectId:run.projectId,shot:shot.shotId,prompt:shot.prompt,faceRefineMode:shot.faceRefineMode,firstFrame,references:shot.references,dialogueEvents:shot.dialogueEvents,duration:shot.duration,width:shot.width,height:shot.height,model:'Minimax H3',candidates:1});
+      await connector('/jobs',{id:jobId,projectId:run.projectId,shot:shot.shotId,prompt:shot.prompt,faceRefineMode:shot.faceRefineMode,firstFrame,references:shot.references,dialogueEvents:shot.audioMode==='voiceover'?[]:shot.dialogueEvents,sourceFingerprint:shot.sourceFingerprint,duration:shot.duration,width:shot.width,height:shot.height,model:'Minimax H3',candidates:1});
       await connector('/jobs/'+jobId+'/comfy',{});
       let job;
       for(;;){
@@ -141,16 +142,16 @@ async function work(run){
         if(checkedTiming){shot.subtitleTiming=checkedTiming;save(run);continue;}
         run.current={index:i+1,stage:'按实际发声时间对齐字幕'};save(run);
         const expected=shot.dialogueEvents.filter(e=>e.type==='speech').map(e=>e.text).join('');
-        try{const transcription=await transcribe(path.join(dir,`source-${i}.mp4`),expected,run.asrModel||'small');shot.subtitleTiming=alignSubtitles(shot.dialogueEvents,transcription,(17*Math.round((shot.duration*24-5)/17)+5)/24)}catch(error){shot.subtitleTiming={status:'needs_review',reason:error.message,cues:[]}}
+        try{const transcription=await transcribe(shot.audioMode==='voiceover'?resolveAudioAsset(shot.audioAsset):path.join(dir,`source-${i}.mp4`),expected,run.asrModel||'small');shot.subtitleTiming=alignSubtitles(shot.dialogueEvents,transcription,(17*Math.round((shot.duration*24-5)/17)+5)/24)}catch(error){shot.subtitleTiming={status:'needs_review',reason:error.message,cues:[]}}
         save(run);
       }
       run.subtitleAlignment={model:run.asrModel||'small',aligned:run.shots.filter(s=>s.subtitleTiming?.status==='aligned').length,issues:run.shots.flatMap((s,i)=>s.subtitleTiming?.status==='needs_review'?[{index:i+1,reason:s.subtitleTiming.reason}]:[])};save(run);
     }
     // Keep original model audio intact; create a reversible composition-only silent track.
     for(const [i,shot] of run.shots.entries())if(ShotAudio.validate(shot.audioMode,shot.dialogueEvents,shot.audioAsset)!=='model'){
-      const soundInput=['replacement','overlay'].includes(shot.audioMode)?['-stream_loop','-1','-i',resolveAudioAsset(shot.audioAsset)]:['-f','lavfi','-i','anullsrc=r=48000:cl=stereo'];
-      run.current={index:i+1,stage:shot.audioMode==='overlay'?'叠加音效并保留对白':['replacement','overlay'].includes(shot.audioMode)?'合成独立环境音（不保留模型人声）':'生成整镜静音版本（同时移除环境声）'};save(run);
-      await command(['-y','-i',path.join(dir,`clip-${i}.mp4`),...soundInput,...(shot.audioMode==='overlay'?['-filter_complex','[1:a]volume=0.25[fx];[0:a][fx]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[mix]','-map','0:v:0','-map','[mix]']:['-map','0:v:0','-map','1:a:0']),'-c:v','copy','-c:a','aac','-shortest',path.join(dir,`sound-${i}.mp4`)],path.join(dir,`sound-${i}.log`));
+      const soundInput=shot.audioMode==='voiceover'?['-i',resolveAudioAsset(shot.audioAsset)]:['replacement','overlay'].includes(shot.audioMode)?['-stream_loop','-1','-i',resolveAudioAsset(shot.audioAsset)]:['-f','lavfi','-i','anullsrc=r=48000:cl=stereo'];
+      run.current={index:i+1,stage:shot.audioMode==='overlay'?'叠加音效并保留对白':['replacement','overlay','voiceover'].includes(shot.audioMode)?'合成独立环境音（不保留模型人声）':'生成整镜静音版本（同时移除环境声）'};save(run);
+      await command(['-y','-i',path.join(dir,`clip-${i}.mp4`),...soundInput,...(shot.audioMode==='overlay'?['-filter_complex','[1:a]volume=0.25[fx];[0:a][fx]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[mix]','-map','0:v:0','-map','[mix]']:['-map','0:v:0','-map','1:a:0']),...(shot.audioMode==='voiceover'?['-af','apad']:[]),'-c:v','copy','-c:a','aac','-shortest',path.join(dir,`sound-${i}.mp4`)],path.join(dir,`sound-${i}.log`));
     }
     for(const [i,shot] of run.shots.entries())if(Framing.validateBottomCrop(shot.cropBottomPercent)>0){
       run.current={index:i+1,stage:'整理画面边缘（保留原始素材）'};save(run);
@@ -227,7 +228,7 @@ function recomposePlan(run,changes){
     if(change.cropBottomPercent!==undefined)shot.cropBottomPercent=Framing.validateBottomCrop(change.cropBottomPercent);
     const source=shot.sourceExcerpt||(shot.dialogueEvents||[]).filter(e=>e.type==='screen').map(e=>e.text).join('\n');
     if(change.screenCards!==undefined)shot.screenCards=ScreenCards.validate(change.screenCards,source);shot.sourceExcerpt=source;
-    if(change.audioMode!==undefined){if(shot.renderMode==='black'&&['replacement','overlay'].includes(change.audioMode))throw Error('纯黑静音镜头不能添加环境音');const asset=change.audioAsset??shot.audioAsset;shot.audioMode=ShotAudio.validate(change.audioMode,shot.dialogueEvents,asset);if(['replacement','overlay'].includes(shot.audioMode)){resolveAudioAsset(asset);shot.audioAsset=asset}delete shot.speechCheck;};
+    if(change.audioMode!==undefined){if(shot.renderMode==='black'&&['replacement','overlay','voiceover'].includes(change.audioMode))throw Error('纯黑静音镜头不能添加环境音');const asset=change.audioAsset??shot.audioAsset;shot.audioMode=ShotAudio.validate(change.audioMode,shot.dialogueEvents,asset);if(['replacement','overlay','voiceover'].includes(shot.audioMode)){resolveAudioAsset(asset);shot.audioAsset=asset}if(shot.audioMode==='voiceover'&&require('./audio-assets').duration(asset)>(17*Math.round((shot.duration*24-5)/17)+5)/24+0.04)throw Error('画外声音轨长于当前镜头');delete shot.speechCheck;delete shot.subtitleTiming;};
   }
   return {id:'film_'+crypto.randomBytes(8).toString('hex'),projectId:run.projectId,title:run.title+(changes.some(c=>c.cropBottomPercent!==undefined)?' · 画面整理':changes.some(c=>c.audioMode!==undefined)?' · 声音更新':' · 文字更新'),parentRunId:run.id,deferQualityReview:!!run.deferQualityReview,qualityGate:!!run.qualityGate,alignSubtitles:true,asrModel:run.audit?.model==='medium'?'medium':run.asrModel||'small',compositionOnly:!partial,shots,status:'pending',createdAt:new Date().toISOString()};
 }

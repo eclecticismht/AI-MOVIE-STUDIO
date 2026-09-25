@@ -22,7 +22,7 @@ function sourceLocation(value){
 }
 function validate(input){
   if(!input||typeof input.projectId!=='string'||!Array.isArray(input.clips)||!input.clips.length||input.clips.length>100)throw Error('请选择 1–100 个有视频的镜头');
-  const ids=new Set(),sources=input.clips.map((c,i)=>{if(typeof c.shotId!=='string'||ids.has(c.shotId))throw Error('镜头编号无效或重复');ids.add(c.shotId);sourceLocation(c.url);if(c.audioMode&&!['model','mute','replacement'].includes(c.audioMode))throw Error('声音模式无效');if(c.audioMode==='replacement')resolveAudioAsset(c.audioAsset);return {...c,id:c.shotId,sequence:i+1,dur:c.sourceDuration}});
+  const ids=new Set(),sources=input.clips.map((c,i)=>{if(typeof c.shotId!=='string'||ids.has(c.shotId))throw Error('镜头编号无效或重复');ids.add(c.shotId);sourceLocation(c.url);if(c.audioMode&&!['model','mute','replacement','voiceover'].includes(c.audioMode))throw Error('声音模式无效');if(['replacement','voiceover'].includes(c.audioMode))resolveAudioAsset(c.audioAsset);return {...c,id:c.shotId,sequence:i+1,dur:c.sourceDuration}});
   const edit={order:sources.map(s=>s.id),clips:Object.fromEntries(sources.map(s=>[s.id,s]))},clips=Edit.build(sources,edit),mix=Edit.mix(input.mix);
   if(mix.musicFile)resolveAudioAsset(mix.musicFile);
   if(clips.at(-1).end>1800)throw Error('单次剪辑导出最长 30 分钟');
@@ -32,7 +32,7 @@ function command(args){return new Promise((resolve,reject)=>{const p=spawn(FFMPE
 async function download(location,file){if(location.file){await fs.promises.copyFile(location.file,file);return}const r=await fetch(location.url,{redirect:'error',signal:AbortSignal.timeout(120000)});if(!r.ok)throw Error('视频无法读取：HTTP '+r.status);let size=0;await pipeline(Readable.fromWeb(r.body),new Transform({transform(chunk,encoding,cb){size+=chunk.length;cb(size>512*1024*1024?Error('单个素材超过512MB'):null,chunk)}}),fs.createWriteStream(file))}
 function save(run){fs.mkdirSync(ROOT,{recursive:true});fs.writeFileSync(path.join(ROOT,run.id,'run.json'),JSON.stringify(run,null,2))}
 function audioFilter(clip,mix,shot){
-  const normalize=mix.normalizeDialogue===true&&(!clip.audioMode||clip.audioMode==='model')&&shot?.dialogueEvents?.some(e=>e.type==='speech');
+  const normalize=mix.normalizeDialogue===true&&(!clip.audioMode||['model','voiceover'].includes(clip.audioMode))&&shot?.dialogueEvents?.some(e=>e.type==='speech');
   return (normalize?'loudnorm=I=-18:TP=-1.5:LRA=11,':'')+'volume='+(clip.audioMode==='mute'?0:clip.gain)+',aresample=48000,apad';
 }
 async function work(run){
@@ -44,7 +44,7 @@ async function work(run){
       let info;try{await command(['-hide_banner','-i',file]);throw Error('无法检查视频')}catch(e){info=e.log||''}
       const match=/Duration: (\d+):(\d+):([\d.]+)/.exec(info);if(!match)throw Error('视频缺少可读取的时长');const actual=Number(match[1])*3600+Number(match[2])*60+Number(match[3]);
       if(c.trimOut>actual+0.08)throw Error('第 '+(i+1)+' 镜裁切出点超过实际视频时长，请加载预览后重新设置。');
-      const hasAudio=/Audio:/.test(info),extra=c.audioMode==='replacement'?['-stream_loop','-1','-i',resolveAudioAsset(c.audioAsset)]:!hasAudio||c.audioMode==='mute'?['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']:[];
+      const hasAudio=/Audio:/.test(info),extra=c.audioMode==='voiceover'?['-ss',String(c.trimIn),'-i',resolveAudioAsset(c.audioAsset)]:c.audioMode==='replacement'?['-stream_loop','-1','-i',resolveAudioAsset(c.audioAsset)]:!hasAudio||c.audioMode==='mute'?['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']:[];
       await command(['-y','-ss',String(c.trimIn),'-i',file,...extra,'-t',String(c.duration),'-map','0:v:0','-map',extra.length?'1:a:0':'0:a:0','-vf','scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,format=yuv420p','-af',audioFilter(c,run.plan.mix,captionShots[i]),'-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-ac','2',path.join(dir,'clip-'+i+'.mp4')]);
     }
     run.message='合成转场与混音';save(run);

@@ -52,9 +52,9 @@ async function render(plan,selections,dir){
   const match=/Duration: (\d+):(\d+):([\d.]+)/.exec(info);if(!match)throw Error('无法读取第 '+(i+1)+' 镜时长');
   const duration=+match[1]*3600 + +match[2]*60 + +match[3],s=source.shot,mode=s.audioMode||'model';
   if(!Number.isFinite(duration)||duration<=0||duration>3600)throw Error('镜头时长无效');
-  const extra=['replacement','overlay'].includes(mode)?['-stream_loop','-1','-i',resolveAudioAsset(s.audioAsset)]:mode==='mute'||!/Audio:/.test(info)?['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']:[];
+  const extra=mode==='voiceover'?['-i',resolveAudioAsset(s.audioAsset)]:['replacement','overlay'].includes(mode)?['-stream_loop','-1','-i',resolveAudioAsset(s.audioAsset)]:mode==='mute'||!/Audio:/.test(info)?['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']:[];
   const audio=mode==='overlay'?['-filter_complex','[1:a]volume=0.25[fx];[0:a][fx]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[mix]','-map','0:v:0','-map','[mix]']:['-map','0:v:0','-map',extra.length?'1:a:0':'0:a:0'];
-  await command(['-y','-i',file,...extra,...audio,'-t',String(duration),'-vf',cropFilter(s.cropBottomPercent||0)+',fps=24,format=yuv420p','-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-ar','48000','-ac','2',path.join(dir,`clip-${i}.mp4`)]);
+  await command(['-y','-i',file,...extra,...audio,...(mode==='voiceover'?['-af','apad']:[]),'-t',String(duration),'-vf',cropFilter(s.cropBottomPercent||0)+',fps=24,format=yuv420p','-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-ar','48000','-ac','2',path.join(dir,`clip-${i}.mp4`)]);
   shots.push({...s,sequence:i+1,shotId:slot.shotId,label:slot.label,start:time,end:time+duration,actualDuration:duration});time+=duration;
   if(!require('./film-quality').passed(s.speechCheck))warnings.push({index:i+1,shotId:slot.shotId,message:s.speechCheck?.reason||'声音尚未核对，请观看确认'});
  }
@@ -69,7 +69,7 @@ async function render(plan,selections,dir){
 }
 function reviewWarnings(selections){return selections.flatMap(({slot,source},i)=>require('./film-quality').passed(source.shot.speechCheck)?[]:[{index:i+1,shotId:slot.shotId,message:source.shot.speechCheck?.reason||'声音尚未核对，请观看确认'}])}
 function signatureFor(plan,selections){return hash([plan,selections.map(({source:s})=>[s.shot.videoUrl||s.id,s.shot.audioMode,s.shot.audioAsset,s.shot.cropBottomPercent,s.shot.subtitle,s.shot.dialogueEvents,s.shot.screenCards,s.shot.subtitleTiming])])}
-function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=true}={}){
+function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=true,currentData=()=>require('./workspace-api').createStore().read().data}={}){
  const states=new Map();let ticking=false;
  function save(s){fs.mkdirSync(root,{recursive:true});const file=path.join(root,s.id+'.json');fs.writeFileSync(file+'.tmp',JSON.stringify(s,null,2));fs.renameSync(file+'.tmp',file)}
  if(fs.existsSync(root))for(const name of fs.readdirSync(root).filter(n=>/^act_[a-f0-9]{32}\.json$/.test(n))){try{const s=JSON.parse(fs.readFileSync(path.join(root,name),'utf8'));if(s.status==='assembling')s.status='waiting';states.set(s.id,s)}catch{}}
@@ -101,7 +101,9 @@ function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=t
    }catch(e){state.status='failed';state.message=e.message;state.failedSignature=signature}save(state);
   }}finally{ticking=false}
  }
- async function approve(id,versionId){const s=states.get(id),v=s?.versions.at(-1);if(!s?.enabled||s.status!=='ready'||v?.id!==versionId)throw Error('场次已更新，请先观看最新成片');const fresh=choose(s.plan,await sources());if(!s.enabled||s.status!=='ready'||s.versions.at(-1)!==v||fresh.missing.length||signatureFor(s.plan,fresh.selections)!==v.signature)throw Error('镜头已更新，请先观看最新成片');v.approvedAt=new Date().toISOString();s.message='本场已通过';save(s);return publicState(s)}
+ async function approve(id,versionId){const s=states.get(id),v=s?.versions.at(-1);if(!s?.enabled||s.status!=='ready'||v?.id!==versionId)throw Error('场次已更新，请先观看最新成片');
+  const data=currentData();if(data?.projects.some(p=>p.id===s.plan.projectId))for(const slot of s.plan.shots){const shot=data.shots.find(x=>x.id===slot.shotId&&x.projectId===s.plan.projectId&&!x.autoArchived);if(!shot||await require('./film-source-sync').fingerprint(shot,data)!==slot.sourceFingerprint)throw Error('磁盘分镜已修改，请同步当前场次并生成新版本')}
+  const fresh=choose(s.plan,await sources());if(!s.enabled||s.status!=='ready'||s.versions.at(-1)!==v||fresh.missing.length||signatureFor(s.plan,fresh.selections)!==v.signature)throw Error('镜头已更新，请先观看最新成片');const before={approvedAt:v.approvedAt,message:s.message};v.approvedAt=new Date().toISOString();s.message='本场已通过';try{save(s)}catch(e){v.approvedAt=before.approvedAt;s.message=before.message;throw e}return publicState(s)}
  function retry(id){const s=states.get(id);if(!s?.enabled)throw Error('场次不存在');s.failedSignature=null;save(s);if(autoTick)void tick().catch(()=>{})}
  function file(id,version){const s=states.get(id);if(!s?.versions.some(v=>v.id===version))throw Error('成片版本不存在');return path.join(root,id,version,'movie.mp4')}
  function setTitle(id,value){const s=states.get(id);if(!s?.enabled)throw Error('场次不存在');const card=titleCard(value);if(card)s.plan.titleCard=card;else delete s.plan.titleCard;s.failedSignature=null;s.status='waiting';s.message='片名设置已保存，镜头齐全后自动更新成片';save(s);if(autoTick)void tick().catch(()=>{});return publicState(s)}

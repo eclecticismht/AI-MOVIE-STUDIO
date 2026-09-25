@@ -1,21 +1,18 @@
 const fs=require('node:fs'),path=require('node:path'),{spawn}=require('node:child_process');
 const normalize=s=>String(s||'').normalize('NFKC').replace(/[\p{P}\p{Z}\s]/gu,'').toLowerCase();
+function spokenInteger(digits){
+ if(digits==='0')return '零';let result='',gap=false;
+ for(let i=0;i<digits.length;i++){const digit=Number(digits[i]),place=digits.length-i-1;if(!digit){if(result)gap=true;continue}if(gap){result+='零';gap=false}if(!(digit===1&&place===1&&!result))result+='零一二三四五六七八九'[digit];result+=['','十','百','千'][place]}
+ return result;
+}
 function comparisonText(value){
- const text=String(value||'').normalize('NFKC');
- // Compare ordinary integer spellings without rewriting the script or ASR output.
- // Keep decimal tokens, leading-zero identifiers and long numbers literal.
+ let text=String(value||'').normalize('NFKC');
+ // Chinese year digits and decimal digits are equivalent spoken forms, not omitted digits.
+ text=text.replace(/[零〇一二三四五六七八九]{4}(?=年)/g,year=>Array.from(year,c=>String('零一二三四五六七八九'.indexOf(c==='〇'?'零':c))).join(''));
+ text=text.replace(/(?<![\d.])(\d{1,4})\.(\d{1,4})(?![\d.])/g,(all,whole,fraction)=>whole.length>1&&whole[0]==='0'?all:spokenInteger(whole)+'点'+Array.from(fraction,c=>'零一二三四五六七八九'[Number(c)]).join(''));
  return normalize(text.replace(/\d+/g,(digits,offset)=>{
   if(digits.length>4||digits.length>1&&digits[0]==='0'||text[offset-1]==='.'||text[offset+digits.length]==='.')return digits;
-  if(digits==='0')return '零';
-  let result='',gap=false;
-  for(let i=0;i<digits.length;i++){
-   const digit=Number(digits[i]),place=digits.length-i-1;
-   if(!digit){if(result)gap=true;continue}
-   if(gap){result+='零';gap=false}
-   if(!(digit===1&&place===1&&!result))result+='零一二三四五六七八九'[digit];
-   result+=['','十','百','千'][place];
-  }
-  return result;
+  return spokenInteger(digits);
  }));
 }
 function distance(a,b){let row=Array.from({length:b.length+1},(_,i)=>i);for(let i=0;i<a.length;i++){const next=[i+1];for(let j=0;j<b.length;j++)next.push(Math.min(next[j]+1,row[j+1]+1,row[j]+(a[i]===b[j]?0:1)));row=next}return row[b.length]}

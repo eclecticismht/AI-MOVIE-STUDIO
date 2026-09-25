@@ -1,6 +1,12 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{execFile}=require('node:child_process');
 const ROOT=path.join(__dirname,'audio-assets');
 const FFMPEG=process.env.FFMPEG_PATH||'C:\\AI\\Comfy UI\\ComfyUI\\.venv\\Lib\\site-packages\\imageio_ffmpeg\\binaries\\ffmpeg-win-x86_64-v7.1.exe';
+function wavDuration(bytes){
+ if(bytes.toString('ascii',0,4)!=='RIFF'||bytes.toString('ascii',8,12)!=='WAVE')throw Error('声音素材不是标准 WAV');
+ let rate=0,length=0;for(let offset=12;offset+8<=bytes.length;){const name=bytes.toString('ascii',offset,offset+4),size=bytes.readUInt32LE(offset+4);if(offset+8+size>bytes.length)throw Error('声音文件不完整');if(name==='fmt '&&size>=16)rate=bytes.readUInt32LE(offset+16);if(name==='data')length+=size;offset+=8+size+(size%2)}
+ if(!rate||!length)throw Error('无法读取声音时长');return length/rate;
+}
+function duration(file){return wavDuration(fs.readFileSync(resolveAudioAsset(file)))}
 function resolveAudioAsset(file){
  if(typeof file!=='string'||!/^ams-audio-[a-f0-9]{64}\.wav$/.test(file))throw Error('请选择有效的独立环境音素材');
  const result=path.join(ROOT,file);if(!fs.existsSync(result))throw Error('环境音素材缺失，请重新导入');return result;
@@ -23,4 +29,4 @@ async function audioAssetApi(req,res,pathname){
  let raw='',size=0;for await(const c of req){size+=c.length;if(size>29000000)throw Error('音频文件过大');raw+=c}send(201,await importAudio(JSON.parse(raw).dataUrl));
  }catch(e){send(400,{error:e.message})}return true;
 }
-module.exports={resolveAudioAsset,importAudio,audioAssetApi};
+module.exports={resolveAudioAsset,importAudio,audioAssetApi,wavDuration,duration};
