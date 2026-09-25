@@ -31,6 +31,20 @@ function validate(input){
 function command(args){return new Promise((resolve,reject)=>{const p=spawn(FFMPEG,args,{windowsHide:true,stdio:['ignore','ignore','pipe']});let log='';p.stderr.on('data',b=>log=(log+b).slice(-20000));p.on('error',reject);p.on('close',code=>code===0?resolve(log):reject(Object.assign(Error('合成失败：'+log.slice(-1200)),{log})))})}
 async function download(location,file){if(location.file){await fs.promises.copyFile(location.file,file);return}const r=await fetch(location.url,{redirect:'error',signal:AbortSignal.timeout(120000)});if(!r.ok)throw Error('视频无法读取：HTTP '+r.status);let size=0;await pipeline(Readable.fromWeb(r.body),new Transform({transform(chunk,encoding,cb){size+=chunk.length;cb(size>512*1024*1024?Error('单个素材超过512MB'):null,chunk)}}),fs.createWriteStream(file))}
 function save(run){fs.mkdirSync(ROOT,{recursive:true});fs.writeFileSync(path.join(ROOT,run.id,'run.json'),JSON.stringify(run,null,2))}
+function listExports(projectId,root=ROOT,io=fs){
+  if(typeof projectId!=='string'||!projectId.trim()||projectId.length>200)throw Error('请选择有效项目');
+  if(!io.existsSync(root))return [];
+  const exports=[];
+  for(const id of io.readdirSync(root)){
+    if(!/^cut_[a-f0-9]{16}$/.test(id))continue;
+    try{
+      const run=JSON.parse(io.readFileSync(path.join(root,id,'run.json'),'utf8'));
+      if(run.status!=='complete'||run.plan?.projectId!==projectId||!Number.isFinite(run.duration)||run.duration<=0||!io.existsSync(path.join(root,id,'movie.mp4')))continue;
+      exports.push({id,title:run.plan.title,duration:run.duration,clipCount:run.plan.clips.length,createdAt:run.createdAt,url:'/timeline-exports/'+id+'/movie.mp4'});
+    }catch{} // A damaged or incomplete export must not hide other completed films.
+  }
+  return exports.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))||b.id.localeCompare(a.id));
+}
 function audioFilter(clip,mix,shot){
   const normalize=mix.normalizeDialogue===true&&(!clip.audioMode||['model','voiceover'].includes(clip.audioMode))&&shot?.dialogueEvents?.some(e=>e.type==='speech');
   return (normalize?'loudnorm=I=-18:TP=-1.5:LRA=11,':'')+'volume='+(clip.audioMode==='mute'?0:clip.gain)+',aresample=48000,apad';
@@ -67,6 +81,9 @@ async function timelineExportApi(req,res,pathname){
   const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data))};
   try{
     if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)throw Error('请从本地工作室操作');
+    if(pathname==='/api/timeline-export'&&req.method==='GET'){
+      send(200,{exports:listExports(new URL(req.url,'http://localhost').searchParams.get('projectId'))});return true;
+    }
     if(pathname==='/api/timeline-media'&&req.method==='GET'){
       const source=sourceLocation(new URL(req.url,'http://localhost').searchParams.get('url'));if(source.file){require('./media-response').sendFile(req,res,source.file)}else{
         const r=await fetch(source.url,{redirect:'error',headers:req.headers.range?{Range:req.headers.range}:{},signal:AbortSignal.timeout(60000)});res.writeHead(r.status,Object.fromEntries(['content-type','content-length','content-range','accept-ranges'].filter(k=>r.headers.has(k)).map(k=>[k,r.headers.get(k)])));await pipeline(Readable.fromWeb(r.body),res);
@@ -81,4 +98,4 @@ async function timelineExportApi(req,res,pathname){
     send(404,{error:'剪辑接口不存在'});
   }catch(e){if(!res.headersSent)send(400,{error:e.message});else res.destroy()}return true;
 }
-module.exports={sourceLocation,validate,work,timelineExportApi,audioFilter};
+module.exports={sourceLocation,validate,work,timelineExportApi,audioFilter,listExports};
