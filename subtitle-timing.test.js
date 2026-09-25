@@ -30,3 +30,10 @@ test('composition reuses verified timing without another lower-accuracy transcri
  assert.equal(checkedSubtitleTiming({...shot,speechCheck:{...shot.speechCheck,status:'needs_review',review:{accepted:true}}}),null);
  assert.equal(shot.subtitleTiming,undefined);
 });
+
+test('verified recognizer tokens bound a numeric utterance without inventing word timing',()=>{
+ const events=[{type:'speech',text:'2024年出游14.19亿人次。'}],transcription={timingSource:'recognizer-tokens',segments:[{start:.4,end:4.8,text:'二零二四年出游十四点一九亿人次'}]};
+ const aligned=alignSubtitles(events,transcription,6);assert.equal(aligned.method,'verified-utterance');assert.deepEqual(aligned.cues,[{start:.4,end:4.8,text:events[0].text}]);
+ for(const invalid of [{...transcription,segments:[{start:.4,end:4.8,text:'二零二四年出游十四点九一亿人次'}]},{...transcription,segments:[{start:4.8,end:.4,text:transcription.segments[0].text}]},{...transcription,timingSource:'whole-clip'}])assert.equal(alignSubtitles(events,invalid,6).status,'needs_review');
+ assert.equal(alignSubtitles([{type:'speech',text:'2024年。'},{type:'speech',text:'出游14.19亿人次。'}],transcription,6).status,'needs_review');
+});

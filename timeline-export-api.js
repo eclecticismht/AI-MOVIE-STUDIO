@@ -45,7 +45,7 @@ async function work(run){
       const match=/Duration: (\d+):(\d+):([\d.]+)/.exec(info);if(!match)throw Error('视频缺少可读取的时长');const actual=Number(match[1])*3600+Number(match[2])*60+Number(match[3]);
       if(c.trimOut>actual+0.08)throw Error('第 '+(i+1)+' 镜裁切出点超过实际视频时长，请加载预览后重新设置。');
       const hasAudio=/Audio:/.test(info),extra=c.audioMode==='voiceover'?['-ss',String(c.trimIn),'-i',resolveAudioAsset(c.audioAsset)]:c.audioMode==='replacement'?['-stream_loop','-1','-i',resolveAudioAsset(c.audioAsset)]:!hasAudio||c.audioMode==='mute'?['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']:[];
-      await command(['-y','-ss',String(c.trimIn),'-i',file,...extra,'-t',String(c.duration),'-map','0:v:0','-map',extra.length?'1:a:0':'0:a:0','-vf','scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,format=yuv420p','-af',audioFilter(c,run.plan.mix,captionShots[i]),'-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-ac','2',path.join(dir,'clip-'+i+'.mp4')]);
+      await command(['-y','-ss',String(c.trimIn),'-i',file,...extra,'-t',String(c.duration),'-map','0:v:0','-map',extra.length?'1:a:0':'0:a:0','-vf','fps=24,scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p','-af',audioFilter(c,run.plan.mix,captionShots[i]),'-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-ac','2',path.join(dir,'clip-'+i+'.mp4')]);
     }
     run.message='合成转场与混音';save(run);
     const clips=run.plan.clips.map(c=>({duration:c.duration,overlap:c.overlap,edit:c})),graph=Edit.graph(clips),inputs=run.plan.clips.flatMap((_,i)=>['-i',path.join(dir,'clip-'+i+'.mp4')]);

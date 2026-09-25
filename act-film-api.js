@@ -40,6 +40,13 @@ function loadSources(){
  return result;
 }
 function command(args){return new Promise((resolve,reject)=>{const child=spawn(FFMPEG,args,{windowsHide:true,stdio:['ignore','ignore','pipe']});let log='';child.stderr.on('data',b=>log=(log+b).slice(-12000));child.on('error',reject);child.on('close',code=>code===0?resolve(log):reject(Object.assign(Error('合成失败：'+log.slice(-800)),{log})))})}
+function encodedDuration(log){
+ // The normalized video is CFR 24. Container duration includes AAC padding and
+ // is rounded to centiseconds, so use the encoder's actual frame count instead.
+ const frames=Number([...log.matchAll(/^frame=(\d+)\s*$/gm)].at(-1)?.[1]);
+ if(!Number.isSafeInteger(frames)||frames<=0||frames>86400)throw Error('无法确认镜头实际帧数');
+ return frames/24;
+}
 async function render(plan,selections,dir){
  fs.mkdirSync(dir,{recursive:true});const shots=[],warnings=[];let time=0;
  for(const [i,{slot,source}] of selections.entries()){
@@ -50,21 +57,24 @@ async function render(plan,selections,dir){
   }}
   let info='';try{await command(['-hide_banner','-i',file])}catch(e){info=e.log||''}
   const match=/Duration: (\d+):(\d+):([\d.]+)/.exec(info);if(!match)throw Error('无法读取第 '+(i+1)+' 镜时长');
-  const duration=+match[1]*3600 + +match[2]*60 + +match[3],s=source.shot,mode=s.audioMode||'model';
-  if(!Number.isFinite(duration)||duration<=0||duration>3600)throw Error('镜头时长无效');
+  const inputDuration=+match[1]*3600 + +match[2]*60 + +match[3],s=source.shot,mode=s.audioMode||'model';
+  if(!Number.isFinite(inputDuration)||inputDuration<=0||inputDuration>3600)throw Error('镜头时长无效');
   const extra=mode==='voiceover'?['-i',resolveAudioAsset(s.audioAsset)]:['replacement','overlay'].includes(mode)?['-stream_loop','-1','-i',resolveAudioAsset(s.audioAsset)]:mode==='mute'||!/Audio:/.test(info)?['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']:[];
   const audio=mode==='overlay'?['-filter_complex','[1:a]volume=0.25[fx];[0:a][fx]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[mix]','-map','0:v:0','-map','[mix]']:['-map','0:v:0','-map',extra.length?'1:a:0':'0:a:0'];
-  await command(['-y','-i',file,...extra,...audio,...(mode==='voiceover'?['-af','apad']:[]),'-t',String(duration),'-vf',cropFilter(s.cropBottomPercent||0)+',fps=24,format=yuv420p','-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-ar','48000','-ac','2',path.join(dir,`clip-${i}.mp4`)]);
+  // Put fps before scale: FFmpeg 7.1 can lose the final frame in scale,fps order.
+  const encoded=await command(['-y','-i',file,...extra,...audio,...(mode==='voiceover'?['-af','apad=whole_dur='+inputDuration]:[]),'-t',String(inputDuration),'-vf','setpts=PTS-STARTPTS,fps=24,'+cropFilter(s.cropBottomPercent||0)+',format=yuv420p','-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-ar','48000','-ac','2','-progress','pipe:2','-nostats',path.join(dir,`clip-${i}.mp4`)]);
+  const duration=encodedDuration(encoded);
   shots.push({...s,sequence:i+1,shotId:slot.shotId,label:slot.label,start:time,end:time+duration,actualDuration:duration});time+=duration;
   if(!require('./film-quality').passed(s.speechCheck))warnings.push({index:i+1,shotId:slot.shotId,message:s.speechCheck?.reason||'声音尚未核对，请观看确认'});
  }
- fs.writeFileSync(path.join(dir,'concat.txt'),shots.map((s,i)=>`file 'clip-${i}.mp4'`).join('\n'));
+ fs.writeFileSync(path.join(dir,'concat.txt'),shots.map((s,i)=>`file 'clip-${i}.mp4'\nduration ${s.actualDuration}`).join('\n'));
  await command(['-y','-f','concat','-safe','0','-i',path.join(dir,'concat.txt'),'-c','copy',path.join(dir,'joined.mp4')]);
  fs.writeFileSync(path.join(dir,'subtitles.ass'),require('./film-api').makeAss(shots));
  const ass=path.join(dir,'subtitles.ass').replace(/\\/g,'/').replace(/:/g,'\\:').replace(/'/g,"\\'");
  const card=plan.titleCard&&titleCard(plan.titleCard),offset=Math.max(0,time-(card?.seconds||0));
- const filter=card?['-loop','1','-i',path.join(__dirname,card.imageUrl),'-filter_complex',`[0:v]ass=filename='${ass}'[base];[1:v]scale=1024:400:force_original_aspect_ratio=decrease,format=rgba,fade=t=in:st=${offset}:d=1:alpha=1[title];[base][title]overlay=(W-w)/2:(H-h)/2:enable='gte(t,${offset})':shortest=1[v]`,'-map','[v]','-map','0:a:0','-t',String(time)]:['-vf',`ass=filename='${ass}'`];
- await command(['-y','-i',path.join(dir,'joined.mp4'),...filter,'-c:v','libx264','-preset','fast','-crf','20','-c:a','copy','-movflags','+faststart',path.join(dir,'movie.mp4')]);
+ const base=`setpts=PTS-STARTPTS,fps=24,ass=filename='${ass}'`;
+ const filter=card?['-loop','1','-i',path.join(__dirname,card.imageUrl),'-filter_complex',`[0:v]${base}[base];[1:v]scale=1024:400:force_original_aspect_ratio=decrease,format=rgba,fade=t=in:st=${offset}:d=1:alpha=1[title];[base][title]overlay=(W-w)/2:(H-h)/2:enable='gte(t,${offset})':shortest=1[v]`,'-map','[v]','-map','0:a:0']:['-vf',base];
+ await command(['-y','-i',path.join(dir,'joined.mp4'),...filter,'-t',String(time),'-c:v','libx264','-preset','fast','-crf','20','-c:a','copy','-movflags','+faststart',path.join(dir,'movie.mp4')]);
  return {shots:shots.map(s=>({shotId:s.shotId,label:s.label,start:s.start,end:s.end})),duration:time,warnings};
 }
 function reviewWarnings(selections){return selections.flatMap(({slot,source},i)=>require('./film-quality').passed(source.shot.speechCheck)?[]:[{index:i+1,shotId:slot.shotId,message:source.shot.speechCheck?.reason||'声音尚未核对，请观看确认'}])}
@@ -129,4 +139,4 @@ function createActFilmApi(){
   }catch(e){if(!res.headersSent)send(400,{error:e.message});else res.destroy()}return true;
  };
 }
-module.exports={titleCard,validate,loadSources,render,createService,createActFilmApi};
+module.exports={titleCard,validate,loadSources,render,encodedDuration,createService,createActFilmApi};

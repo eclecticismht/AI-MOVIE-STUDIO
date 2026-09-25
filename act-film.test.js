@@ -46,6 +46,13 @@ test('subtitle offsets use actual clip lengths for automatic scene composition',
  const ass=require('./film-api').makeAss([{duration:5,actualDuration:2,subtitle:'第一镜'},{duration:5,actualDuration:3,subtitle:'第二镜'}]);assert.match(ass,/0:00:02\.00,0:00:05\.00,Default/);
 });
 
+test('act timing uses completed video frames rather than padded audio duration',()=>{
+ const {encodedDuration}=require('./act-film-api');
+ assert.equal(encodedDuration('frame=0\nprogress=continue\nframe=192\nprogress=end\n'),8);
+ assert.equal(encodedDuration('frame=175\r\nprogress=end\r\n'),175/24);
+ for(const bad of ['', 'frame=0\n', 'frame=-1\n', 'frame=100000\n'])assert.throws(()=>encodedDuration(bad),/帧数/);
+});
+
 test('one-step review revision targets the selected shot and forwards the exact request',()=>{
  const vm=require('node:vm'),calls=[],textarea={value:''},host={querySelector:s=>s==='#actFilmRequest'?{value:'裤子保持纯黑色'}:s==='#actFilmShot'?{value:'b'}:{pause:()=>calls.push('pause')}};
  const ctx={TL:{busy:false},D:{activeProjectId:'p',shots:[{id:'b',projectId:'p',storyboardBatchId:'batch'}]},tlCanLeave:()=>true,cutStop:()=>{},cutBatch:()=> 'batch',tlSelect:id=>calls.push(id),timelineOpenRedo:()=>{},timelineRedoState:{shot:{id:'b'},dialog:{querySelector:()=>textarea}},timelineSubmitRedo:()=>calls.push(textarea.value),tlRender:()=>{},tlTools:()=>{},renderMasters:()=>{},storyFlowOutline:()=>'',dispatchJob:()=>{},setInterval:()=>{}};

@@ -8,7 +8,13 @@ function alignSubtitles(events,transcription,duration){
   const chars=Array.from(original),positions=chars.map((c,i)=>normalize(c)?i:-1).filter(i=>i>=0);
   const segments=transcription.segments.filter(s=>normalize(s.normalizedText??s.text));
   const lengths=segments.map(s=>Array.from(normalize(s.normalizedText??s.text)).length);
-  if(lengths.reduce((a,b)=>a+b,0)!==positions.length)return {status:'needs_review',reason:'识别字数无法可靠映射到原句，未自动对齐。',cues:[]};
+  if(lengths.reduce((a,b)=>a+b,0)!==positions.length){
+    // Spoken years/decimals can have a different character count. Verified token
+    // timing still bounds one complete utterance; do not invent word boundaries.
+    let prior=0;const valid=segments.length&&segments.every(s=>{const ok=Number.isFinite(s.start)&&Number.isFinite(s.end)&&s.start>=prior&&s.end>s.start&&s.start<duration;prior=s.end;return ok});
+    if(valid&&review.status==='text_match'&&transcription.timingSource==='recognizer-tokens'&&events.filter(e=>e.type==='speech').length===1)return {status:'aligned',method:'verified-utterance',cues:[{start:segments[0].start,end:Math.min(segments.at(-1).end,duration),text:original}]};
+    return {status:'needs_review',reason:'识别字数无法可靠映射到原句，未自动对齐。',cues:[]};
+  }
   let consumed=0,offset=0,previousEnd=0;const cues=[];
   for(let i=0;i<segments.length;i++){
     const s=segments[i];if(!Number.isFinite(s.start)||!Number.isFinite(s.end)||s.start<previousEnd||s.end<=s.start||s.start>=duration)return {status:'needs_review',reason:'识别时间轴异常，未自动对齐。',cues:[]};
