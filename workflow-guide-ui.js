@@ -22,12 +22,14 @@ function workflowShotIssues(shots){
   return issues;
 }
 async function workflowPreflight(shots){
-  const projectId=D.activeProjectId,baseline=JSON.stringify(shots);
+  const snapshot=()=>JSON.stringify(shots.map(({beatIds,storyBinding,...content})=>content));
+  const projectId=D.activeProjectId,baseline=snapshot();
   const errors=workflowShotIssues(shots).filter(i=>!i.warning);
   if(errors.length)throw Error('生成前检查未通过：\n'+errors.map(i=>'第 '+i.index+' 镜：'+i.message).join('\n'));
   // Screen composites still use uploaded images; pure black sequences are local only.
   if(shots.some(s=>s.renderMode!=='black'))await checkRendererReady();
-  if(D.activeProjectId!==projectId||baseline!==JSON.stringify(shots))throw Error('检查期间项目或分镜已变化，请重新检查。');
+  if(typeof ensureStoryCoverage==='function')await ensureStoryCoverage(shots);
+  if(D.activeProjectId!==projectId||baseline!==snapshot())throw Error('检查期间项目或分镜已变化，请重新检查。');
 }
 async function inspectWorkflow(button){
   const projectId=D.activeProjectId,shots=document.getElementById('edit')?.classList.contains('on')?filmPlanShots().shots:visibleStoryboardShots();

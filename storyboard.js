@@ -125,7 +125,7 @@ async function generateStoryboard(){
   storyboardRequests.add(p.id);storyboardMessages.set(p.id,'正在按剧本场次生成分镜，请稍候…');renderShots2();
   try{
     const segments=StoryboardSegments.split(content,timing),result={shots:[],model:p.screenplayModel||'deepseek-flash'};
-    const draftKey='aimovie_storyboard_draft_'+p.id,signature=JSON.stringify({content,assets,timing,notes,model:result.model});let draft;
+    const draftKey='aimovie_storyboard_draft_'+p.id,signature=JSON.stringify({content,assets,timing,notes,storyUnderstanding:source.storyUnderstanding,model:result.model});let draft;
     try{draft=JSON.parse(localStorage.getItem(draftKey)||'null')}catch{}
     if(draft?.signature!==signature||!Array.isArray(draft.parts))draft={signature,parts:[]};
     for(const [partIndex,part] of segments.entries()){
@@ -133,8 +133,8 @@ async function generateStoryboard(){
     let piece;
     for(let attempt=0,repair=draft.repairs?.[partIndex],feedback=repair?'\n请继续修正上次未通过检查的原始结果。':'';attempt<3;attempt++){
       storyboardMessages.set(p.id,`正在生成第 ${partIndex+1}/${segments.length} 段分镜${attempt?`，自动修正第 ${attempt} 次`:''}…`);if(D.activeProjectId===p.id)renderShots2();
-      const guidance='\n口头对白时长计算：字数除以3再加1秒，向上取整，最少4秒，最多15秒；超过15秒必须按原文标点拆成多镜，每镜仍逐字保留原句片段和说话人，不得删掉台词。屏幕文字不计入口头对白。';
-      const response=await fetch('/api/storyboard',{method:'POST',headers:{'Content-Type':'application/json',...(typeof textAIHeaders==='function'?textAIHeaders(p.screenplayModel):(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{}))},body:JSON.stringify({screenplay:part.text,repair,notes:guidance+(segments.length>1?`\n本次只生成完整剧本第${partIndex+1}/${segments.length}段，不能重复其他段。整片镜头数量要求按本段目标时长比例分配，不要为本段生成整片镜头数量。`:'')+feedback+'\n'+notes,assets,timing:part.timing,model:p.screenplayModel||'deepseek-flash'}),signal:AbortSignal.timeout(250000)});
+      const guidance=(draft.feedback?'上次故事核对问题，请修正：'+draft.feedback+'\n':'')+'\n口头对白时长计算：字数除以3再加1秒，向上取整，最少4秒，最多15秒；超过15秒必须按原文标点拆成多镜，每镜仍逐字保留原句片段和说话人，不得删掉台词。屏幕文字不计入口头对白。';
+      const response=await fetch('/api/storyboard',{method:'POST',headers:{'Content-Type':'application/json',...(typeof textAIHeaders==='function'?textAIHeaders(p.screenplayModel):(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{}))},body:JSON.stringify({screenplay:part.text,sourceStory:source.sourceStory,storyUnderstanding:source.storyUnderstanding,repair,notes:guidance+(segments.length>1?`\n本次只生成完整剧本第${partIndex+1}/${segments.length}段，不能重复其他段。整片镜头数量要求按本段目标时长比例分配，不要为本段生成整片镜头数量。`:'')+feedback+'\n'+notes,assets,timing:part.timing,model:p.screenplayModel||'deepseek-flash'}),signal:AbortSignal.timeout(250000)});
       if(!(response.headers.get('content-type')||'').includes('application/json'))throw new Error('分镜接口尚未启动，请重启本地服务器。');
       piece=await response.json();
       if(response.ok)break;
@@ -146,9 +146,16 @@ async function generateStoryboard(){
     if(!Array.isArray(piece.shots)||!piece.shots.length)throw Error('分段未返回镜头');if(piece.shots[0].continuePrevious)throw Error('新场次首镜不能承接其他场次');draft.parts[partIndex]=piece;localStorage.setItem(draftKey,JSON.stringify(draft));result.shots.push(...piece.shots);result.model=piece.model;
     }
     if(!Array.isArray(result.shots)||!result.shots.length)throw new Error('未收到有效分镜，请重试。');
-    if(!D.projects.includes(p))return;
-    const batch={id:uid('BOARD'),projectId:p.id,sourceScriptId:sourceId,sourceTitle,sourceContent:content,notes,timing,model:result.model,createdAt:new Date().toISOString()};
-    const shots=result.shots.map((s,i)=>({id:uid('SH'),projectId:p.id,scriptId:sourceId,storyboardBatchId:batch.id,sequence:i+1,sourceExcerpt:s.sourceExcerpt,script:s.action,visual:s.visual,desc:s.visual,camera:s.camera,char:s.characters,scene:s.scene,dialogue:s.dialogue,dur:s.duration,assetStates:s.assetStates||{},status:'待制作',prompt:'',characterIds:validatedShotAssetIds(s,'characters','characterIds',p.id),sceneIds:validatedShotAssetIds(s,'scenes','sceneIds',p.id),propIds:validatedShotAssetIds(s,'props','propIds',p.id)}));
+    let storyReview;
+    if(source.storyUnderstanding){
+      storyboardMessages.set(p.id,'正在对照原文核对全部分镜…');
+      storyReview=(await storyAIRequest('/api/screenplay/coverage',{story:source.sourceStory,storyUnderstanding:source.storyUnderstanding,shots:result.shots,model:result.model})).review;
+      if(storyReview?.status!=='checked'){draft.review=storyReview;draft.failedParts=draft.parts;draft.parts=[];draft.feedback=(storyReview?.issues||['核对结果不完整']).join('\n');localStorage.setItem(draftKey,JSON.stringify(draft));throw Error('分镜尚未通过故事核对：'+draft.feedback+'。点击重新生成可按这些问题修正。')}
+      if(storyReview.beatIds)result.shots=StoryUnderstanding.annotate(result.shots.map((s,i)=>({...s,beatIds:storyReview.beatIds[i]})),source.storyUnderstanding);
+    }
+    if(!D.projects.includes(p)||source.content!==content)throw Error('剧本已变化，未保存过期分镜');
+    const batch={id:uid('BOARD'),projectId:p.id,sourceScriptId:sourceId,sourceTitle,sourceContent:content,sourceStory:source.sourceStory,storyUnderstanding:source.storyUnderstanding,storyReview,notes,timing,model:result.model,createdAt:new Date().toISOString()};
+    const shots=result.shots.map((s,i)=>({id:uid('SH'),projectId:p.id,scriptId:sourceId,storyboardBatchId:batch.id,sequence:i+1,sourceExcerpt:s.sourceExcerpt,beatIds:s.beatIds,storyBinding:s.storyBinding,screenCards:s.screenCards,script:s.action,visual:s.visual,desc:s.visual,camera:s.camera,char:s.characters,scene:s.scene,dialogue:s.dialogue,dur:s.duration,assetStates:s.assetStates||{},status:'待制作',prompt:'',characterIds:validatedShotAssetIds(s,'characters','characterIds',p.id),sceneIds:validatedShotAssetIds(s,'scenes','sceneIds',p.id),propIds:validatedShotAssetIds(s,'props','propIds',p.id)}));
     for(let i=0;i<shots.length;i++)if(result.shots[i].continuePrevious){if(!i)throw Error('第一镜不能承接上一镜');shots[i].continueFromShotId=shots[i-1].id;}
     const batches=[...(D.storyboardBatches||[]),batch],allShots=[...D.shots,...shots];
     localStorage.setItem('aimovie_data',JSON.stringify({...D,shots:allShots,storyboardBatches:batches,projects:D.projects.map(item=>item===p?{...p,storyboardBatchId:batch.id}:item)}));

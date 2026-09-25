@@ -74,17 +74,21 @@ async function submitToComfy(job) {
 const statusSyncs=new Map();
 function syncComfyStatus(job){if(statusSyncs.has(job.id))return statusSyncs.get(job.id);const task=readComfyStatus(job).finally(()=>statusSyncs.delete(job.id));statusSyncs.set(job.id,task);return task}
 async function readComfyStatus(job) {
-  if(job.submissionPending&&!job.comfyPromptId){const result=await require('./connector-submission').reconcile(job,comfyRequest);job.connectorStatus=result?'已找回 ComfyUI 任务':'提交结果尚未确认，已阻止重复生成；请检查渲染器队列。';persistQueue();}
+  if(job.cancelledAt)return job;
+  const recovery=require('./connector-recovery');
+  if(job.submissionPending&&!job.comfyPromptId){const result=await require('./connector-submission').reconcile(job,comfyRequest);if(result){recovery.found(job);job.connectorStatus='已找回 ComfyUI 任务'}else recovery.missing(job);persistQueue();}
   if(job.originalVideoUrl){require('./face-refine').processResult(job,{request:comfyRequest,persist:persistQueue,comfyUrl});return job;}
-  if(!job.comfyPromptId || job.cancelledAt) return job;
+  if(!job.comfyPromptId || job.cancelledAt || job.videoUrl) return job;
   const history=await comfyRequest("/history/"+encodeURIComponent(job.comfyPromptId)),record=history[job.comfyPromptId];
   if(!record) {
     const queue=await comfyRequest('/queue'),pending=(queue.queue_pending||[]).findIndex(x=>x[1]===job.comfyPromptId),running=(queue.queue_running||[]).some(x=>x[1]===job.comfyPromptId);
     if(pending>=0){job.connectorStatus='ComfyUI 排队中';job.progress={phase:'queued',ahead:pending+(queue.queue_running||[]).length,updatedAt:Date.now()}}
-    else if(running){job.connectorStatus='ComfyUI 运行中';if(!job.progress||job.progress.phase==='queued')job.progress={phase:'loading',updatedAt:Date.now()};job.progress.connected=liveSocket?.readyState===1}
-    else {job.connectorStatus='ComfyUI 等待状态确认';job.progress={phase:'unknown',updatedAt:Date.now()}}
-    return job;
+    else if(running){job.connectorStatus='ComfyUI 运行中';if(!job.progress||['queued','unknown','missing'].includes(job.progress.phase))job.progress={phase:'loading',updatedAt:Date.now()};job.progress.connected=liveSocket?.readyState===1}
+    else recovery.missing(job);
+    if(pending>=0||running)recovery.found(job);
+    persistQueue();return job;
   }
+  recovery.found(job);
   const output=Object.values(record.outputs||{}).flatMap(x=>[...(x.videos||[]),...(x.gifs||[]),...(x.images||[])])
     .find(x=>typeof x.filename==="string" && /\.(mp4|webm|mov|mkv|avi)$/i.test(x.filename));
   job.comfyStatus=record.status?.status_str||"unknown";
@@ -132,7 +136,7 @@ http.createServer(async (request, response) => {
   const statusMatch=request.url.match(/^\/jobs\/([^/]+)\/status$/);
   if (request.method === "GET" && statusMatch) { const job=jobs.get(decodeURIComponent(statusMatch[1])); if(!job)return send(response,404,{ok:false,error:"Unknown connector job."}); try{return send(response,200,{ok:true,job:await syncComfyStatus(job)})}catch(error){return send(response,502,{ok:false,error:error.message})} }
   const cancelMatch=request.url.match(/^\/jobs\/([^/]+)\/cancel$/);
-  if (request.method === "POST" && cancelMatch) { const job=jobs.get(decodeURIComponent(cancelMatch[1])); if(!job)return send(response,404,{ok:false,error:"Unknown connector job."}); if(submitting.has(job.id))return send(response,409,{ok:false,error:"任务正在提交，请稍后同步状态。"}); if(job.comfyStatus==="success"||job.videoUrl)return send(response,409,{ok:false,error:"Completed H3 jobs cannot be cancelled."}); try { if(job.comfyPromptId){const queue=await comfyRequest("/queue"),running=(queue.queue_running||[]).some(entry=>entry[1]===job.comfyPromptId);if(running)return send(response,409,{ok:false,error:"H3 is already running; it is not interrupted to protect other GPU work."});await comfyRequest("/queue",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({delete:[job.comfyPromptId]})});}job.connectorStatus="已取消";job.cancelledAt=new Date().toISOString();jobs.set(job.id,job);persistQueue();return send(response,200,{ok:true,job});} catch(error){return send(response,502,{ok:false,error:error.message})} }
+  if (request.method === "POST" && cancelMatch) { const job=jobs.get(decodeURIComponent(cancelMatch[1])); if(!job)return send(response,404,{ok:false,error:"Unknown connector job."}); if(submitting.has(job.id))return send(response,409,{ok:false,error:"任务正在提交，请稍后同步状态。"}); if(job.comfyStatus==="success"||job.videoUrl)return send(response,409,{ok:false,error:"Completed H3 jobs cannot be cancelled."}); try { if(job.submissionPending&&!job.comfyPromptId)await require('./connector-submission').reconcile(job,comfyRequest);if(job.comfyPromptId){const queue=await comfyRequest("/queue"),running=(queue.queue_running||[]).some(entry=>entry[1]===job.comfyPromptId);if(running)return send(response,409,{ok:false,error:"H3 is already running; it is not interrupted to protect other GPU work."});await comfyRequest("/queue",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({delete:[job.comfyPromptId]})});}job.connectorStatus="已取消";job.cancelledAt=new Date().toISOString();jobs.set(job.id,job);persistQueue();return send(response,200,{ok:true,job});} catch(error){return send(response,502,{ok:false,error:error.message})} }
   const comfyMatch=request.url.match(/^\/jobs\/([^/]+)\/comfy$/);
   if (request.method === "POST" && comfyMatch) { const job=jobs.get(decodeURIComponent(comfyMatch[1])); if(!job) return send(response,404,{ok:false,error:"Unknown connector job."}); if(job.cancelledAt)return send(response,409,{ok:false,error:"已取消的任务不能重新提交，请创建新任务。"}); if(job.comfyPromptId)return send(response,200,{ok:true,job}); if(submitting.has(job.id))return send(response,409,{ok:false,error:"任务正在提交，请稍后同步状态。"}); submitting.add(job.id); try { const result=await submitToComfy(job); job.connectorStatus="已提交 ComfyUI H3"; job.comfyPromptId=result.prompt_id; job.comfyNumber=result.number; job.submittedAt=new Date().toISOString(); jobs.set(job.id,job); persistQueue(); return send(response,202,{ok:true,job}); } catch(error) { job.connectorStatus=(job.submissionPending?"提交结果待确认：":"ComfyUI 提交失败：")+error.message; jobs.set(job.id,job);persistQueue();return send(response,502,{ok:false,error:error.message,job}); } finally { submitting.delete(job.id); } }
   if (request.method === "POST" && request.url === "/jobs") {

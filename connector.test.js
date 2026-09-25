@@ -11,8 +11,8 @@ test('reference videos reach H3 as frame batches with distinct image and video l
  assert.equal(graph['40'].class_type,'LoadVideo');assert.equal(graph['41'].class_type,'GetVideoComponents');assert.deepEqual(graph['8'].inputs['ref_videos.ref_video_0'],['41',0]);assert.deepEqual(graph['8'].inputs['ref_images.ref_image_0'],['20',0]);assert.match(graph['5'].inputs.global_prompt,/<Video 1>/);assert.match(graph['5'].inputs.global_prompt,/<Picture 1>/);assert.equal(graph['8'].inputs['ref_video_audios.ref_video_audio_0'],undefined);
 });
 
-function harness(fetchImpl) {
-  let handler, saved='[]';
+function harness(fetchImpl,seed=[]) {
+  let handler, saved=JSON.stringify(seed);
   const context=vm.createContext({
     require(name) {
       if(name==='http')return {createServer(fn){handler=fn;return {listen(){}}}};
@@ -35,6 +35,13 @@ function harness(fetchImpl) {
 }
 const reply=data=>({ok:true,json:async()=>data});
 const job={id:'test',prompt:'A city at dawn',duration:5};
+test('lost persisted Comfy task becomes recoverable and a late output is found without resubmission',async()=>{
+ let output=false,offline=false,posts=0;
+ const request=harness(async(url,options={})=>{if(options.method==='POST')posts++;if(offline)throw Error('offline');return reply(url.endsWith('/queue')?{queue_running:[],queue_pending:[]}:output?{p1:{status:{completed:true,status_str:'success'},outputs:{save:{videos:[{filename:'late.mp4'}]}}}}:{})},[{...job,comfyPromptId:'p1',recovery:{status:'checking',since:Date.now()-40000,checks:1}}]);
+ offline=true;assert.equal((await request('GET','/jobs/test/status')).status,502);assert.equal((await request('GET','/jobs')).data.jobs[0].recovery.checks,1);
+ offline=false;await request('GET','/jobs/test/status');const lost=await request('GET','/jobs/test/status');assert.equal(lost.data.job.recovery.status,'missing');assert.equal(lost.data.job.progress.phase,'missing');
+ output=true;const found=await request('GET','/jobs/test/status');assert.match(found.data.job.videoUrl,/late.mp4/);assert.equal(found.data.job.recovery,undefined);assert.equal(posts,0);
+});
 test('successful queue deletion with an empty HTTP body is recorded as cancelled',async()=>{
  const request=harness(async(url,options={})=>{
   if(url.endsWith('/prompt'))return reply({prompt_id:'p1'});

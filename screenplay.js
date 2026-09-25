@@ -84,7 +84,7 @@ function renderScreenplayWorkspace() {
     <div class="card"><div class="toolbar"><h2 style="margin:0">完整剧本</h2>${versions.length?`<label for="screenplayVersion">版本</label><select id="screenplayVersion" onchange="selectScreenplay(this.value)">${versions.map((version,index)=>`<option value="${esc(version.id)}" ${version.id===script?.id?'selected':''}>第 ${index+1} 版 · ${esc(new Date(version.createdAt).toLocaleString())}</option>`).join('')}</select><button class="btn" onclick="copyScreenplay()">复制剧本</button><button class="btn" onclick="exportScreenplay()">导出 TXT</button>`:''}</div>
       ${script?`<label for="screenplayContent" class="muted">可直接修改正文，修改后自动保存</label><textarea id="screenplayContent" oninput="saveScreenplayField('content',this.value)" style="min-height:620px;line-height:1.9;margin-top:12px">${esc(script.content)}</textarea>`:'<div class="empty">粘贴故事原文后点击“生成剧本”，在这里编辑完整正文。</div>'}
     </div>
-    ${legacy.length?`<details class="card"><summary>以前保存的剧本内容（${legacy.length} 份）</summary>${legacy.map(item=>`<article id="workcard_${esc(item.id)}"><div class="toolbar"><h3>${esc(item.title)}</h3><button class="btn" data-script-id="${esc(item.id)}" onclick="deleteSavedScript(this.dataset.scriptId)">删除这份剧本</button></div><pre style="white-space:pre-wrap;font:inherit;line-height:1.8">${esc(item.content)}</pre></article>`).join('')}</details>`:''}`;
+    ${typeof storyUnderstandingPanel==='function'?storyUnderstandingPanel(script?.storyUnderstanding):''}${legacy.length?`<details class="card"><summary>以前保存的剧本内容（${legacy.length} 份）</summary>${legacy.map(item=>`<article id="workcard_${esc(item.id)}"><div class="toolbar"><h3>${esc(item.title)}</h3><button class="btn" data-script-id="${esc(item.id)}" onclick="deleteSavedScript(this.dataset.scriptId)">删除这份剧本</button></div><pre style="white-space:pre-wrap;font:inherit;line-height:1.8">${esc(item.content)}</pre></article>`).join('')}</details>`:''}`;
 }
 async function generateScreenplay() {
   const p=activeProject();if(screenplayRequests.has(p.id))return;
@@ -99,12 +99,17 @@ async function generateScreenplay() {
   if(!model){screenplayMessages.set(p.id,'请填写 DeepSeek 模型名称。');renderScripts();return}
   screenplayRequests.add(p.id);screenplayMessages.set(p.id,'正在生成剧本并整理角色、场景、道具，请稍候…');renderScripts();
   try {
-    const response=await fetch('/api/screenplay',{method:'POST',headers:{'Content-Type':'application/json',...(typeof textAIHeaders==='function'?textAIHeaders(model):(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{}))},body:JSON.stringify({story,notes,model,includeAssets:true}),signal:AbortSignal.timeout(250000)});
+    const understanding=typeof storyAIRequest==='function'?(await storyAIRequest('/api/screenplay/understanding',{story,model})).understanding:undefined;
+    let result;
+    if(typeof storyAIRequest==='function')result=await storyAIRequest('/api/screenplay',{story,notes,model,storyUnderstanding:understanding,includeAssets:true});
+    else {
+    const response=await fetch('/api/screenplay',{method:'POST',headers:{'Content-Type':'application/json',...(typeof textAIHeaders==='function'?textAIHeaders(model):(screenplayApiKey?{Authorization:'Bearer '+screenplayApiKey}:{}))},body:JSON.stringify({story,notes,model,storyUnderstanding:understanding,includeAssets:true}),signal:AbortSignal.timeout(250000)});
     if(!(response.headers.get('content-type')||'').includes('application/json'))throw new Error('剧本服务尚未启动，请重启本地服务器。');
-    const result=await response.json();if(!response.ok)throw new Error(result.error||'剧本生成失败，请重试。');
+    result=await response.json();if(!response.ok)throw new Error(result.error||'剧本生成失败，请重试。');
+    }
     if(typeof result.content!=='string'||!result.content.trim())throw new Error('没有收到剧本正文，请重试。');
     if(!D.projects.includes(p))return;
-    const script={id:uid('SCR'),projectId:p.id,kind:'screenplay',title:p.name+' · 剧本',content:result.content,sourceStory:story,notes,model:result.model||model,status:'已生成',createdAt:new Date().toISOString()};
+    const script={id:uid('SCR'),projectId:p.id,kind:'screenplay',title:p.name+' · 剧本',content:result.content,sourceStory:story,storyUnderstanding:understanding,notes,model:result.model||model,status:'已生成',createdAt:new Date().toISOString()};
     const prepared=prepareScreenplayAssets(result.assets,p.id,script.id);
     Object.assign(script,prepared.references,{assetSummary:prepared.summary});
     const next={...D,...prepared.collections,scripts:[...D.scripts,script],projects:D.projects.map(project=>project===p?{...p,screenplayId:script.id}:project)};

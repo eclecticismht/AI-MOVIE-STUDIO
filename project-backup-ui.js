@@ -18,9 +18,8 @@ async function restoreProjectBackup(){
   const r=await fetch('/api/film',{signal:AbortSignal.timeout(5000)});if(!r.ok)throw Error('无法核对制作状态');const {runs}=await r.json();
   if(runs.some(r=>['pending','rendering','assembling'].includes(r.status)))throw Error('请先暂停正在制作的成片');
   const data=pendingProjectBackup;if(!data)throw Error('备份已改变，请重新选择');
-  localStorage.setItem('aimovie_before_restore',ProjectBackup.encode(D));
-  localStorage.setItem('aimovie_data',JSON.stringify(data));D=data;pendingProjectBackup=null;location.reload();
- }catch(e){document.getElementById('backupStatus').textContent='恢复未完成：'+e.message;button.disabled=!pendingProjectBackup;}
+  D=await workspaceRestore(data);pendingProjectBackup=null;location.reload();
+ }catch(e){document.getElementById('backupStatus').textContent=(e.diskCommitted?'磁盘已恢复，浏览器尚未更新，请使用顶部“备份本页并载入磁盘版本”：':'恢复未完成：')+e.message;button.disabled=!pendingProjectBackup;}
 }
 const settingsBeforeBackup=renderSettings;
 renderSettings=function(){settingsBeforeBackup();document.getElementById('settings').insertAdjacentHTML('beforeend',`<div class="card"><h2>工作区备份与恢复</h2><p>备份项目、故事、分镜、资产配置和审片记录。媒体文件仍需保留在本机原目录；不包含会话密钥。</p><button class="btn" onclick="downloadProjectBackup()">下载完整数据备份</button><label>选择备份文件<input type="file" accept="application/json,.json" onchange="previewProjectBackup(this)"></label><button class="btn" id="restoreBackup" disabled onclick="restoreProjectBackup()">恢复所选备份</button><p role="status" id="backupStatus"></p></div>`)};

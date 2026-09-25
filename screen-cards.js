@@ -20,7 +20,7 @@
     const cards=Object.entries(shot.assetStates||{}).filter(([id,s])=>ids.includes(id)&&s.screenText?.trim()).map(([id,s])=>{
       const asset=['characters','scenes','props'].flatMap(kind=>library[kind]||[]).find(a=>a.id===id&&a.projectId===shot.projectId);
       if(!asset)throw Error('屏幕信息卡引用资产不存在');return {title:s.screenEffect==='type-delete'?'输入草稿（未发送）':asset.name,text:s.screenText,...(s.screenEffect==='type-delete'?{effect:s.screenEffect}:{})};
-    });return validate(cards,shot.sourceExcerpt);
+    });const combined=[...(shot.screenCards||[]),...cards];return validate(combined.filter((c,i)=>combined.findIndex(x=>x.text===c.text)===i),shot.sourceExcerpt);
   }
   function timeline(cards,duration){
     if(!cards.some(c=>c.effect))return [{start:0,end:duration,cards}];

@@ -3,6 +3,16 @@ const {groups,choose,at}=require('./act-film'),{validate,createService}=require(
 const input=()=>({projectId:'p',scopeKey:'batch',acts:[{id:'first',title:'场次一',shots:[{shotId:'a',sourceFingerprint:'a'.repeat(64)},{shotId:'b',sourceFingerprint:'a'.repeat(64)}]},{id:'second',title:'场次二',shots:[{shotId:'c',sourceFingerprint:'a'.repeat(64)}]}]});
 const source=(shotId,stamp='2026-09-24T00:00:00Z',ready=true)=>({id:shotId+stamp,projectId:'p',createdAt:stamp,ready,shot:{shotId,sourceFingerprint:'a'.repeat(64),videoUrl:shotId+stamp,speechCheck:{status:'needs_review'}}});
 function fixture(t){const root=fs.mkdtempSync(path.join(os.tmpdir(),'ams-act-film-'));t.after(()=>{for(const f of fs.readdirSync(root))fs.unlinkSync(path.join(root,f));fs.rmdirSync(root)});return root}
+test('matching speech cannot hide uncertain subtitles or imply visual approval',async t=>{
+ const record=source('a');record.shot.speechCheck={status:'text_match'};record.shot.dialogueEvents=[{type:'speech',text:'测试'}];record.shot.subtitleTiming={status:'needs_review',reason:'未找到完整时间戳'};
+ const service=createService({root:fixture(t),autoTick:false,currentData:()=>null,sources:()=>[record],assemble:async()=>({duration:4,shots:[],warnings:[]})});
+ await service.sync({...input(),acts:[{...input().acts[0],shots:[input().acts[0].shots[0]]}]});await service.tick();let a=service.list('p')[0],v=a.versions[0];
+ assert.equal(v.review.speech,'checked');assert.equal(v.review.subtitles,'needs_review');assert.equal(v.review.visual,'unreviewed');assert.equal(v.warnings[0].kind,'subtitles');
+ await assert.rejects(()=>service.approve(a.id,v.id),/观看/);await assert.rejects(()=>service.approve(a.id,v.id,{watched:true,signature:v.review.signature}),/实际观看结果/);
+ await service.approve(a.id,v.id,{watched:true,signature:v.review.signature,note:'逐句查看后确认字幕时序可接受'});assert.equal(v.review.visual,'reviewed');const approved=v.approvedAt;
+ record.shot.speechCheck={status:'needs_review',reason:'新识别结果疑似多说一句'};await service.tick();assert.equal(v.approvalStale,true);assert.equal(v.approvedAt,approved);assert.equal(v.review.visual,'unreviewed');assert.match(require('./act-film').approval(a,v).label,/本场通过/);
+ await assert.rejects(()=>service.approve(a.id,v.id,{watched:true,signature:v.approvedReview.signature,note:'旧检查'}),/已更新/);
+});
 test('act groups use authored membership across generated batches and do not use scene headings',()=>{
  const data={activeProjectId:'p',projects:[{id:'p',storyActs:{'script|batch':{acts:[{id:'one',title:'第一场次',shotIds:['b','a']},{id:'two',title:'第二场次',shotIds:['c']}]}}}],storyboardBatches:[{id:'batch',projectId:'p',sourceScriptId:'script'}],shots:[{id:'a',projectId:'p',sequence:1,scene:'街道',storyboardBatchId:'batch'},{id:'b',projectId:'p',sequence:2,scene:'餐馆',storyboardBatchId:'generated'},{id:'c',projectId:'p',sequence:3,storyboardBatchId:'batch'},{id:'foreign',projectId:'other',storyboardBatchId:'batch'}]};
  assert.deepEqual(groups(data,'batch').map(a=>a.shots.map(s=>s.shotId)),[['a','b'],['c']]);
@@ -21,8 +31,8 @@ test('reject invalid or duplicated membership before changing persisted plans',(
 test('first act auto-assembles before later acts, sound warnings remain reviewable, and polling is idempotent',async t=>{
  let data=[source('a')],calls=0;const service=createService({root:fixture(t),autoTick:false,sources:()=>data,assemble:async(p,selection)=>{calls++;return {duration:8,shots:selection.map((x,i)=>({shotId:x.slot.shotId,start:i*4,end:(i+1)*4})),warnings:[{index:1,message:'待核对声音'}]}}});
  await service.sync(input());await service.tick();assert.equal(calls,0);
- data.push(source('b'));await service.tick();let [first,second]=service.list('p');assert.equal(first.status,'ready');assert.equal(first.versions[0].warnings.length,1);assert.equal(first.versions[0].approvedAt,undefined);assert.equal(second.status,'waiting');
- await service.tick();assert.equal(calls,1);await service.approve(first.id,first.versions[0].id);assert.ok(service.list('p')[0].versions[0].approvedAt);
+ data.push(source('b'));await service.tick();let [first,second]=service.list('p');assert.equal(first.status,'ready');assert.equal(first.versions[0].warnings.length,2);assert.equal(first.versions[0].approvedAt,undefined);assert.equal(second.status,'waiting');
+ await service.tick();assert.equal(calls,1);await service.approve(first.id,first.versions[0].id,{watched:true,signature:first.versions[0].review.signature,note:"已观看核对"});assert.ok(service.list('p')[0].versions[0].approvedAt);
  data.push(source('a','2026-09-24T01:00:00Z',false));await assert.rejects(()=>service.approve(first.id,first.versions[0].id),/更新/);await service.tick();assert.equal(service.list('p')[0].versions.length,1);
  data.at(-1).ready=true;await service.tick();first=service.list('p')[0];assert.equal(first.versions.length,2);assert.equal(first.versions[1].approvedAt,undefined);assert.ok(first.versions[0].approvedAt);
  await assert.rejects(()=>service.approve(first.id,first.versions[0].id),/最新/);

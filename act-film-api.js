@@ -48,7 +48,7 @@ function encodedDuration(log){
  return frames/24;
 }
 async function render(plan,selections,dir){
- fs.mkdirSync(dir,{recursive:true});const shots=[],warnings=[];let time=0;
+ fs.mkdirSync(dir,{recursive:true});const shots=[];let time=0;
  for(const [i,{slot,source}] of selections.entries()){
   let file=source.file;
   if(!file){const location=require('./timeline-export-api').sourceLocation(source.url);if(location.file)file=location.file;else{
@@ -65,7 +65,6 @@ async function render(plan,selections,dir){
   const encoded=await command(['-y','-i',file,...extra,...audio,...(mode==='voiceover'?['-af','apad=whole_dur='+inputDuration]:[]),'-t',String(inputDuration),'-vf','setpts=PTS-STARTPTS,fps=24,'+cropFilter(s.cropBottomPercent||0)+',format=yuv420p','-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-ar','48000','-ac','2','-progress','pipe:2','-nostats',path.join(dir,`clip-${i}.mp4`)]);
   const duration=encodedDuration(encoded);
   shots.push({...s,sequence:i+1,shotId:slot.shotId,label:slot.label,start:time,end:time+duration,actualDuration:duration});time+=duration;
-  if(!require('./film-quality').passed(s.speechCheck))warnings.push({index:i+1,shotId:slot.shotId,message:s.speechCheck?.reason||'声音尚未核对，请观看确认'});
  }
  fs.writeFileSync(path.join(dir,'concat.txt'),shots.map((s,i)=>`file 'clip-${i}.mp4'\nduration ${s.actualDuration}`).join('\n'));
  await command(['-y','-f','concat','-safe','0','-i',path.join(dir,'concat.txt'),'-c','copy',path.join(dir,'joined.mp4')]);
@@ -75,9 +74,9 @@ async function render(plan,selections,dir){
  const base=`setpts=PTS-STARTPTS,fps=24,ass=filename='${ass}'`;
  const filter=card?['-loop','1','-i',path.join(__dirname,card.imageUrl),'-filter_complex',`[0:v]${base}[base];[1:v]scale=1024:400:force_original_aspect_ratio=decrease,format=rgba,fade=t=in:st=${offset}:d=1:alpha=1[title];[base][title]overlay=(W-w)/2:(H-h)/2:enable='gte(t,${offset})':shortest=1[v]`,'-map','[v]','-map','0:a:0']:['-vf',base];
  await command(['-y','-i',path.join(dir,'joined.mp4'),...filter,'-t',String(time),'-c:v','libx264','-preset','fast','-crf','20','-c:a','copy','-movflags','+faststart',path.join(dir,'movie.mp4')]);
- return {shots:shots.map(s=>({shotId:s.shotId,label:s.label,start:s.start,end:s.end})),duration:time,warnings};
+ return {shots:shots.map(s=>({shotId:s.shotId,label:s.label,start:s.start,end:s.end})),duration:time,warnings:FilmReview.evaluate(selections).warnings};
 }
-function reviewWarnings(selections){return selections.flatMap(({slot,source},i)=>require('./film-quality').passed(source.shot.speechCheck)?[]:[{index:i+1,shotId:slot.shotId,message:source.shot.speechCheck?.reason||'声音尚未核对，请观看确认'}])}
+const FilmReview=require('./film-review');
 function signatureFor(plan,selections){return hash([plan,selections.map(({source:s})=>[s.shot.videoUrl||s.id,s.shot.audioMode,s.shot.audioAsset,s.shot.cropBottomPercent,s.shot.subtitle,s.shot.dialogueEvents,s.shot.screenCards,s.shot.subtitleTiming])])}
 function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=true,currentData=()=>require('./workspace-api').createStore().read().data}={}){
  const states=new Map();let ticking=false;
@@ -100,20 +99,24 @@ function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=t
    if(!state.enabled)continue;const plan=structuredClone(state.plan),selected=choose(plan,all);state.missing=selected.missing;
    if(selected.missing.length){state.status='waiting';const active=selected.selections.find(x=>!x.source?.ready&&x.source?.status==='rendering');state.message=selected.stale.length?`${selected.stale.length} 个镜头的分镜或资产已更新，旧视频保留；请生成当前版本后审片`:active?`镜头正在制作${Number.isFinite(active.source.progress?.percent)?' · '+active.source.progress.percent+'%':''}，完成后自动合成本场`:`等待 ${selected.missing.length} 个镜头，齐全后自动合成`;save(state);continue}
    const signature=signatureFor(plan,selected.selections);
-   const latest=state.versions.at(-1);if(latest?.signature===signature){latest.warnings=reviewWarnings(selected.selections);state.status='ready';state.message=latest.approvedAt?'本场已通过':'本场成片已生成，待审片';save(state);continue}
+   const latest=state.versions.at(-1);if(latest?.signature===signature){FilmReview.update(latest,selected.selections);state.status='ready';state.message=latest.approvedAt&&!latest.approvalStale?'本场已通过':latest.approvalStale?'检查结果已变化，请重新核对本场':'本场成片已生成，待审片';save(state);continue}
    if(state.failedSignature===signature)continue;
    state.status='assembling';state.message='镜头已齐，正在自动合成本场成片';save(state);
    const versionId='v_'+crypto.randomBytes(12).toString('hex'),dir=path.join(root,state.id,versionId);
    try{const result=await assemble(plan,selected.selections,dir);
     const fresh=choose(state.plan,await sources());
     if(!state.enabled||JSON.stringify(state.plan)!==JSON.stringify(plan)||fresh.missing.length||signatureFor(state.plan,fresh.selections)!==signature){state.status='waiting';save(state);continue}
-    state.versions.push({id:versionId,signature,...result,createdAt:new Date().toISOString(),url:`/api/act-films/${state.id}/${versionId}/video`});state.status='ready';state.message='本场成片已生成，待审片';state.failedSignature=null;
+    const version={id:versionId,signature,...result,createdAt:new Date().toISOString(),url:`/api/act-films/${state.id}/${versionId}/video`};FilmReview.update(version,fresh.selections);state.versions.push(version);state.status='ready';state.message='本场成片已生成，待审片';state.failedSignature=null;
    }catch(e){state.status='failed';state.message=e.message;state.failedSignature=signature}save(state);
   }}finally{ticking=false}
  }
- async function approve(id,versionId){const s=states.get(id),v=s?.versions.at(-1);if(!s?.enabled||s.status!=='ready'||v?.id!==versionId)throw Error('场次已更新，请先观看最新成片');
+ async function approve(id,versionId,confirmation){const s=states.get(id),v=s?.versions.at(-1);if(!s?.enabled||s.status!=='ready'||v?.id!==versionId)throw Error('场次已更新，请先观看最新成片');
   const data=currentData();if(data?.projects.some(p=>p.id===s.plan.projectId))for(const slot of s.plan.shots){const shot=data.shots.find(x=>x.id===slot.shotId&&x.projectId===s.plan.projectId&&!x.autoArchived);if(!shot||await require('./film-source-sync').fingerprint(shot,data)!==slot.sourceFingerprint)throw Error('磁盘分镜已修改，请同步当前场次并生成新版本')}
-  const fresh=choose(s.plan,await sources());if(!s.enabled||s.status!=='ready'||s.versions.at(-1)!==v||fresh.missing.length||signatureFor(s.plan,fresh.selections)!==v.signature)throw Error('镜头已更新，请先观看最新成片');const before={approvedAt:v.approvedAt,message:s.message};v.approvedAt=new Date().toISOString();s.message='本场已通过';try{save(s)}catch(e){v.approvedAt=before.approvedAt;s.message=before.message;throw e}return publicState(s)}
+  const fresh=choose(s.plan,await sources());if(!s.enabled||s.status!=='ready'||s.versions.at(-1)!==v||fresh.missing.length||signatureFor(s.plan,fresh.selections)!==v.signature)throw Error('镜头已更新，请先观看最新成片');
+  const review=FilmReview.evaluate(fresh.selections),record=FilmReview.confirmation(review,confirmation),before=structuredClone(v),message=s.message;
+  if(v.approvedReview)v.approvalHistory=[...(v.approvalHistory||[]),{...v.approvedReview,approvedAt:v.approvedAt}];
+  v.approvedAt=new Date().toISOString();v.approvedReview=record;FilmReview.update(v,fresh.selections);s.message='本场已通过';
+  try{save(s)}catch(e){for(const key of Object.keys(v))delete v[key];Object.assign(v,before);s.message=message;throw e}return publicState(s)}
  function retry(id){const s=states.get(id);if(!s?.enabled)throw Error('场次不存在');s.failedSignature=null;save(s);if(autoTick)void tick().catch(()=>{})}
  function file(id,version){const s=states.get(id);if(!s?.versions.some(v=>v.id===version))throw Error('成片版本不存在');return path.join(root,id,version,'movie.mp4')}
  function setTitle(id,value){const s=states.get(id);if(!s?.enabled)throw Error('场次不存在');const card=titleCard(value);if(card)s.plan.titleCard=card;else delete s.plan.titleCard;s.failedSignature=null;s.status='waiting';s.message='片名设置已保存，镜头齐全后自动更新成片';save(s);if(autoTick)void tick().catch(()=>{});return publicState(s)}
@@ -132,7 +135,7 @@ function createActFilmApi(){
    if(pathname==='/api/act-films'&&req.method==='POST'){send(200,{acts:await service.sync(JSON.parse(await require('./request-body').readUtf8(req,400000)))});return true}
    const match=/^\/api\/act-films\/(act_[a-f0-9]{32})\/(?:(v_[a-f0-9]{24})\/video|(approve|retry|title|notes))$/.exec(pathname);
    if(!match)throw Error('场次接口不存在');
-   if(match[3]&&req.method==='POST'){const body=JSON.parse(await require('./request-body').readUtf8(req,10000)||'{}');send(200,match[3]==='notes'?{act:service.note(match[1],body)}:match[3]==='title'?{act:service.setTitle(match[1],body.titleCard)}:match[3]==='approve'?{act:await service.approve(match[1],body.versionId)}:(service.retry(match[1]),{ok:true}));return true}
+   if(match[3]&&req.method==='POST'){const body=JSON.parse(await require('./request-body').readUtf8(req,10000)||'{}');send(200,match[3]==='notes'?{act:service.note(match[1],body)}:match[3]==='title'?{act:service.setTitle(match[1],body.titleCard)}:match[3]==='approve'?{act:await service.approve(match[1],body.versionId,body.confirmation)}:(service.retry(match[1]),{ok:true}));return true}
    if(match[2]&&['GET','HEAD'].includes(req.method)){
     require('./media-response').sendFile(req,res,service.file(match[1],match[2]));return true;
    }throw Error('请求方式无效');

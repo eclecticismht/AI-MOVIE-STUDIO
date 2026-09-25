@@ -16,7 +16,7 @@ const ROOT=path.join(__dirname,'film-runs');
 const FFMPEG=process.env.FFMPEG_PATH||'C:\\AI\\Comfy UI\\ComfyUI\\.venv\\Lib\\site-packages\\imageio_ffmpeg\\binaries\\ffmpeg-win-x86_64-v7.1.exe';
 const runs=new Map(),busy=new Set(),auditing=new Set();
 function save(run){fs.mkdirSync(path.join(ROOT,run.id),{recursive:true});const f=path.join(ROOT,run.id,'run.json');fs.writeFileSync(f+'.tmp',JSON.stringify(run,null,2));fs.renameSync(f+'.tmp',f)}
-function publicRun(run){return {id:run.id,deferQualityReview:!!run.deferQualityReview,pendingQuality:PendingQuality.visiblePendingQuality(run),rechecking:!!run.rechecking,pauseRequested:!!run.pauseRequested,qualityGate:!!run.qualityGate,qualityHold:run.qualityHold,parentRunId:run.parentRunId,retriedShot:run.retriedShot,retriedShots:run.retriedShots,projectId:run.projectId,title:run.title,status:run.status,error:run.error,createdAt:run.createdAt,completedAt:run.completedAt,completed:run.shots.filter(s=>s.ready).length,total:run.shots.length,plannedSeconds:run.shots.reduce((n,s)=>n+s.duration,0),current:run.current,audit:run.audit,subtitleAlignment:run.subtitleAlignment,videoUrl:run.status==='complete'?'/api/film/'+run.id+'/video':null}}
+function publicRun(run){return {id:run.id,deferQualityReview:!!run.deferQualityReview,pendingQuality:PendingQuality.visiblePendingQuality(run),rechecking:!!run.rechecking,pauseRequested:!!run.pauseRequested,qualityGate:!!run.qualityGate,qualityHold:run.qualityHold,parentRunId:run.parentRunId,retriedShot:run.retriedShot,retriedShots:run.retriedShots,projectId:run.projectId,title:run.title,status:run.status,error:run.error,createdAt:run.createdAt,completedAt:run.completedAt,completed:run.shots.filter(s=>s.ready).length,total:run.shots.length,plannedSeconds:run.shots.reduce((n,s)=>n+s.duration,0),current:run.current,lostTask:run.lostTask,audit:run.audit,subtitleAlignment:run.subtitleAlignment,videoUrl:run.status==='complete'?'/api/film/'+run.id+'/video':null}}
 function pauseAtBoundary(run){
   if(!run.pauseRequested)return false;
   run.status='paused';run.error=null;run.current={stage:'已在镜头之间暂停，已生成素材保留'};return true;
@@ -115,13 +115,20 @@ async function work(run){
         if(shot.continuitySpeakerPosition)firstFrame.speakerPosition=shot.continuitySpeakerPosition;
         shot.continuityFrame={...firstFrame,fromShotId:previous.shotId,fromJobId:previous.jobId};save(run);
       }
-      await connector('/jobs',{id:jobId,projectId:run.projectId,shot:shot.shotId,prompt:shot.prompt,faceRefineMode:shot.faceRefineMode,firstFrame,references:shot.references,dialogueEvents:shot.audioMode==='voiceover'?[]:shot.dialogueEvents,sourceFingerprint:shot.sourceFingerprint,duration:shot.duration,width:shot.width,height:shot.height,model:'Minimax H3',candidates:1});
-      await connector('/jobs/'+jobId+'/comfy',{});
+      const accepted=await connector('/jobs',{id:jobId,projectId:run.projectId,shot:shot.shotId,prompt:shot.prompt,faceRefineMode:shot.faceRefineMode,firstFrame,references:shot.references,dialogueEvents:shot.audioMode==='voiceover'?[]:shot.dialogueEvents,sourceFingerprint:shot.sourceFingerprint,duration:shot.duration,width:shot.width,height:shot.height,model:'Minimax H3',candidates:1});
+      shot.jobId=jobId;save(run);
+      if(!accepted.job?.comfyPromptId&&!accepted.job?.submissionPending)try{await connector('/jobs/'+jobId+'/comfy',{})}catch(error){
+        // A lost POST response may already have started GPU work. Poll/reconcile
+        // the same submission instead of blindly creating another attempt.
+        const state=(await connector('/jobs/'+jobId+'/status')).job;
+        if(!state?.submissionPending&&!state?.comfyPromptId)throw error;
+      }
       let job;
       for(;;){
         job=(await connector('/jobs/'+jobId+'/status')).job;
         run.current={index:i+1,shotId:shot.shotId,stage:job.connectorStatus,progress:job.progress};save(run);
         if(job.videoUrl){shot.faceRefine=job.faceRefine;shot.originalVideoUrl=job.originalVideoUrl;break;}
+        if(require('./connector-recovery').hold(run,i,job)){save(run);return;}
         if(/失败|已取消|未找到视频/.test(job.connectorStatus||'')){shot.renderAttempt=(shot.renderAttempt||0)+1;save(run);throw Error(`第 ${i+1} 镜：${job.connectorStatus}`)}
         await sleep(4000);
       }
@@ -332,7 +339,7 @@ function createFilmApi(){
       if(req.method==='POST'&&match[2]==='accept-review'){
         const {note}=JSON.parse(await require('./request-body').readUtf8(req,5000));FilmQuality.acceptReview(run,note);save(run);send(200,{run:publicRun(run)});return true;
       }
-      if(req.method==='POST'&&match[2]==='resume'){if(!['failed','paused'].includes(run.status))throw Error('该任务无需恢复');if([...runs.values()].some(r=>r.id!==run.id&&r.projectId===run.projectId&&['pending','rendering','assembling'].includes(r.status)))throw Error('此项目已有制作任务');const raw=await require('./request-body').readUtf8(req,1000);const options=JSON.parse(raw||'{}');if(options.deferQualityReview===true)run.deferQualityReview=true;if(run.qualityHold&&run.qualityHold.result.status!=='check_failed'&&!run.deferQualityReview)throw Error('请先处理声音检查问题，不能直接跳过');delete run.qualityHold;delete run.pauseRequested;void work(run);send(202,{run:publicRun(run)});return true}
+      if(req.method==='POST'&&match[2]==='resume'){if(!['failed','paused'].includes(run.status))throw Error('该任务无需恢复');if([...runs.values()].some(r=>r.id!==run.id&&r.projectId===run.projectId&&['pending','rendering','assembling'].includes(r.status)))throw Error('此项目已有制作任务');const raw=await require('./request-body').readUtf8(req,1000);const options=JSON.parse(raw||'{}');if(options.deferQualityReview===true)run.deferQualityReview=true;if(run.qualityHold&&run.qualityHold.result.status!=='check_failed'&&!run.deferQualityReview)throw Error('请先处理声音检查问题，不能直接跳过');await require('./connector-recovery').resume(run,connector);delete run.qualityHold;delete run.pauseRequested;save(run);void work(run);send(202,{run:publicRun(run)});return true}
       if(['GET','HEAD'].includes(req.method)&&['video','preview'].includes(match[2])){
         const preview=match[2]==='preview',index=Number(new URL(req.url,'http://localhost').searchParams.get('index'));
         if(preview&&(!Number.isInteger(index)||index<0||!run.shots[index]?.ready))throw Error('该镜头尚未生成');

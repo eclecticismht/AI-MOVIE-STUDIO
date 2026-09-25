@@ -73,9 +73,26 @@ for(const name of ['dispatchJob','syncComfyJob','cancelJob','deleteJob','simulat
   };
 }
 const renderGenerationBeforeClear=renderGeneration;
+async function recoverLostQueueJob(id){
+ const job=D.jobs.find(j=>j.id===id&&j.projectId===D.activeProjectId);if(!job||renderJobOperations.has(id))return;
+ renderJobOperations.add(id);
+ try{
+  const r=await fetch(D.connector.endpoint+'/jobs/'+encodeURIComponent(id)+'/status',{signal:AbortSignal.timeout(10000)}),out=await r.json();if(!r.ok)throw Error(out.error||'无法确认原任务');
+  if(out.job?.videoUrl||out.job?.recovery?.status!=='missing'){renderJobOperations.delete(id);await syncComfyJob(id);return;}
+  if(D.activeProjectId!==job.projectId)throw Error('项目已切换，请回原项目恢复');
+  const response=await fetch(D.connector.endpoint+'/jobs/'+encodeURIComponent(id)+'/cancel',{method:'POST',signal:AbortSignal.timeout(10000)}),cancelled=await response.json();if(!response.ok)throw Error(cancelled.error||'原任务尚未停止，未重复入队');
+  const jobs=D.jobs.map(j=>j===job?{...j,status:'已取消',recoveryHistory:{...out.job.recovery,reason:'用户选择重新入队'}}:j);
+  localStorage.setItem('aimovie_data',JSON.stringify({...D,jobs}));D.jobs=jobs;
+  await queueById(job.shot);renderQueueMessages.set(job.projectId,'已创建新队列版本，原失联记录保留。点击提交待生成开始制作。');
+ }catch(e){renderQueueMessages.set(job.projectId,e.message)}finally{renderJobOperations.delete(id);renderGeneration()}
+}
 renderGeneration=function(){
   renderGenerationBeforeClear();
   const section=document.getElementById('gen'),projectId=D.activeProjectId,busy=clearingRenderProjects.has(projectId),count=items('jobs').length;
   section.querySelector('h1')?.insertAdjacentHTML('afterend',`<div class="toolbar"><button class="btn" ${busy||!count?'disabled':''} onclick="clearRenderQueue()">${busy?'正在清空…':'一键清空渲染队列'}</button><span class="muted">仅清理当前项目 · ${count} 条任务</span></div><p role="status" aria-live="polite">${esc(renderQueueMessages.get(projectId)||'')}</p>`);
   if(busy)section.querySelectorAll('table button').forEach(button=>button.disabled=true);
+  for(const job of items('jobs').filter(j=>j.recovery?.status==='missing'&&j.status!=='已取消'&&!j.videoUrl)){
+   const row=document.createElement('p');row.textContent=(job.shot||job.id)+' · 任务失联，原记录已保留。 ';
+   const button=document.createElement('button');button.className='btn';button.textContent='查找结果 / 重新入队';button.disabled=busy||renderJobOperations.has(job.id);button.onclick=()=>recoverLostQueueJob(job.id);row.append(button);section.prepend(row);
+  }
 };

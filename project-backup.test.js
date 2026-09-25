@@ -10,7 +10,7 @@ test('restore rejects malformed data, duplicate identities and foreign projects'
 });
 test('restore storage failure leaves active data unchanged; active production blocks restore',async()=>{
  for(const busy of [false,true]){
-  const original=data(),pending=data(),ctx={D:original,pendingProjectBackup:pending,confirm:()=>true,ProjectBackup:Backup,AbortSignal,document:{getElementById:()=>({})},localStorage:{setItem(k){if(k==='aimovie_data')throw Error('full')}},fetch:async()=>({ok:true,json:async()=>({runs:busy?[{status:'rendering'}]:[]})}),location:{reload(){throw Error('unexpected reload')}}};
-  vm.createContext(ctx);const s=fs.readFileSync('project-backup-ui.js','utf8');vm.runInContext(s.slice(s.indexOf('async function restoreProjectBackup'),s.indexOf('const settingsBeforeBackup')),ctx);await vm.runInContext('restoreProjectBackup()',ctx);assert.equal(ctx.D,original);assert.equal(ctx.pendingProjectBackup,pending);
+  let restores=0;const original=data(),pending=data(),ctx={D:original,pendingProjectBackup:pending,workspaceRestore:async()=>{restores++;throw Error('disk full')},confirm:()=>true,ProjectBackup:Backup,AbortSignal,document:{getElementById:()=>({})},fetch:async()=>({ok:true,json:async()=>({runs:busy?[{status:'rendering'}]:[]})}),location:{reload(){throw Error('unexpected reload')}}};
+  vm.createContext(ctx);const s=fs.readFileSync('project-backup-ui.js','utf8');vm.runInContext(s.slice(s.indexOf('async function restoreProjectBackup'),s.indexOf('const settingsBeforeBackup')),ctx);await vm.runInContext('restoreProjectBackup()',ctx);assert.equal(ctx.D,original);assert.equal(ctx.pendingProjectBackup,pending);assert.equal(restores,busy?0:1);
  }
 });

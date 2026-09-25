@@ -23,3 +23,10 @@ test('custom prompts keep their words, with scoped constraints before soundscape
  const prompt=compile({dur:4,continueFromShotId:'previous',prompt:'integrated_multimodal_description: A handover.\n\noverall_soundscape: Quiet.\n\nnon_diegetic_music: N/A'},{},[{kind:'props',name:'Phone portrait',notes:'ONLY inside the screen'}]);
  assert.match(prompt,/A handover/);assert.match(prompt,/ONLY inside the screen/);assert.match(prompt,/final frame of the preceding shot/);assert.ok(prompt.indexOf('Selected visual assets')<prompt.indexOf('overall_soundscape:'));
 });
+
+test('story facts reach the planner without being appended as raw text to the finished H3 prompt',()=>{
+ const shot={dur:7,storyBinding:{beats:[{action:'第一次密码失败，门仍关着'}],facts:[{statement:'总共输入两次',delivery:'visual'}]}};
+ assert.match(compile(shot,{},[]),/第一次密码失败/);
+ shot.prompt='integrated_multimodal_description: He enters the first password. Error beep; door remains closed.\n\noverall_soundscape: Keypad taps and one error beep.\n\nnon_diegetic_music: N/A';
+ const result=compile(shot,{},[]);assert.match(result,/door remains closed/);assert.doesNotMatch(result,/第一次密码失败|总共输入两次|Source-grounded action contract/);
+});
