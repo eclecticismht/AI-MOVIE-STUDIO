@@ -1,10 +1,13 @@
 (function(root){
  const omitted=new Set(['status','filmPrompt','filmPromptVersion','filmPromptSource']);
  function canonical(value){if(Array.isArray(value))return value.map(canonical);if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().filter(k=>value[k]!==undefined).map(k=>[k,canonical(value[k])]));return value;}
- async function fingerprint(shot,data){
+ function source(shot,data){
   const source=Object.fromEntries(Object.entries(shot).filter(([k])=>!omitted.has(k)));
   const assets={};for(const [kind,key] of [['characters','characterIds'],['scenes','sceneIds'],['props','propIds']])assets[kind]=(shot[key]||[]).map(id=>(data[kind]||[]).find(a=>a.id===id&&a.projectId===shot.projectId)||{id,missing:true});
-  const bytes=new TextEncoder().encode(JSON.stringify(canonical({source,assets})));
+  return canonical({source,assets});
+ }
+ async function fingerprint(shot,data){
+  const bytes=new TextEncoder().encode(JSON.stringify(source(shot,data)));
   return Array.from(new Uint8Array(await root.crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
  }
  function apply(shot,validated,expected,actual){
@@ -31,5 +34,5 @@
   });
   return {shots:result,dependentIds:[...affected].filter(id=>id!==current.id)};
  }
- const api={fingerprint,apply,replaceWithDependents};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.FilmSourceSync=api;
+ const api={source,fingerprint,apply,replaceWithDependents};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.FilmSourceSync=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

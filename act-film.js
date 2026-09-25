@@ -11,20 +11,32 @@
   return {scopeKey:entry?.[0].split('|')[1]||batchId,acts:grouped,preferredActId:grouped.find(a=>a.shots.some(s=>shots.find(x=>x.id===s.shotId)?.storyboardBatchId===batchId))?.id};
  }
  function groups(data,batchId){return context(data,batchId).acts}
+ async function snapshot(data,batchId){
+  const sync=typeof module!=='undefined'&&module.exports?require('./film-source-sync'):root.FilmSourceSync;
+  const plan=context(data,batchId),projectId=data.activeProjectId;
+  await Promise.all(plan.acts.flatMap(a=>a.shots).map(async slot=>{
+   const shot=data.shots.find(s=>s.id===slot.shotId&&s.projectId===projectId),before=JSON.stringify(sync.source(shot,data));
+   slot.sourceFingerprint=await sync.fingerprint(shot,data);
+   if(before!==JSON.stringify(sync.source(shot,data)))throw Error('分镜或资产正在更新，请稍后重试');
+  }));
+  if(projectId!==data.activeProjectId||JSON.stringify(context(data,batchId))!==JSON.stringify({...plan,acts:plan.acts.map(a=>({...a,shots:a.shots.map(({sourceFingerprint,...s})=>s)}))}))throw Error('场次正在更新，请稍后重试');
+  return {projectId,...plan};
+ }
  function choose(plan,sources){
   const selections=plan.shots.map(s=>{
    const candidates=sources.filter(x=>x.projectId===plan.projectId&&x.shot.shotId===s.shotId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||b.id.localeCompare(a.id));
-   return {slot:s,source:candidates[0]};
+   const source=candidates[0],stale=!!source&&(!s.sourceFingerprint||source.shot.sourceFingerprint!==s.sourceFingerprint);
+   return {slot:s,source:stale?undefined:source,stale};
   });
-  return {selections,missing:selections.filter(x=>!x.source?.ready).map(x=>x.slot.shotId)};
+  return {selections,missing:selections.filter(x=>!x.source?.ready).map(x=>x.slot.shotId),stale:selections.filter(x=>x.stale).map(x=>x.slot.shotId)};
  }
  function at(shots,time){return shots.find(s=>time>=s.start&&time<s.end)||shots.at(-1)}
  function approval(act,version,pending=false){
   if(pending)return {label:'正在保存…',disabled:true};
   if(version?.id!==act?.versions.at(-1)?.id)return {label:'查看最新版后通过',disabled:false,latest:true,notice:'当前观看的是旧版，已有新版成片。请先切换并观看最新版，再确认通过。'};
-  if(version?.approvedAt)return {label:'本场已通过',disabled:true,notice:'本场通过状态已保存。'};
   if(act?.status!=='ready')return {label:'等待新版成片完成',disabled:true,notice:'镜头正在更新，成片完成后即可确认通过。'};
+  if(version?.approvedAt)return {label:'本场已通过',disabled:true,notice:'本场通过状态已保存。'};
   return {label:'本场通过',disabled:false};
  }
- const api={context,groups,choose,at,approval};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ActFilm=api;
+ const api={context,groups,snapshot,choose,at,approval};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.ActFilm=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

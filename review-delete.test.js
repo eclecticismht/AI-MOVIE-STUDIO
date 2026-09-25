@@ -35,3 +35,21 @@ test('queue button stays in place with inline success and failure feedback',asyn
   vm.createContext(ctx);vm.runInContext(flow,ctx);await vm.runInContext("queueById('s',button)",ctx);assert.equal(navigated,false);assert.equal(button.disabled,false);assert.equal(D.jobs.length,fail?0:1);assert.match(status.textContent,fail?/添加失败/:/成功加入/);
  }
 });
+
+test('timeline queue preflight errors stay inline and release retry state',async()=>{
+ const storyboard=fs.readFileSync('storyboard.js','utf8'),timeline=fs.readFileSync('timeline-ui.js','utf8');
+ const D={activeProjectId:'p',shots:[{id:'s',projectId:'p',status:'待制作'}],jobs:[]},TL={busy:false,notice:''},referenceQueueLocks=new Set(),notice={};
+ const before=JSON.stringify(D),error='生成前检查未通过：茅台酒瓶缺参考图片';let missing=true,prepared=0;
+ const ctx={D,TL,referenceQueueLocks,document:{getElementById:id=>id==='tl-notice'?notice:null},tlCurrent:()=>({shot:D.shots[0]}),tlCanLeave:()=>true,tlRender(){},
+  shotHasActiveJob:()=>D.jobs.length>0,workflowPreflight:async()=>{if(missing)throw Error(error)},prepareStoryboardJob:async()=>{prepared++;return {id:'j'}},localStorage:{setItem(){}},alert(){throw Error('unexpected native alert')}};
+ vm.createContext(ctx);
+ vm.runInContext(storyboard.slice(storyboard.indexOf('async function queueById'),storyboard.indexOf('function redoGeneration')),ctx);
+ vm.runInContext(timeline.slice(timeline.indexOf('function tlMessage'),timeline.indexOf('function tlCanLeave')),ctx);
+ vm.runInContext(timeline.slice(timeline.indexOf('async function tlAction'),timeline.indexOf('function tlSaveAudio')),ctx);
+ await vm.runInContext("tlAction('queue')",ctx);
+ assert.equal(TL.notice,'入队失败：'+error);assert.equal(notice.textContent,TL.notice);assert.equal(JSON.stringify(D),before);assert.equal(prepared,0);assert.equal(TL.busy,false);assert.equal(referenceQueueLocks.size,0);
+ missing=false;await vm.runInContext("tlAction('queue')",ctx);
+ assert.equal(D.jobs.length,1);assert.equal(prepared,1);assert.match(TL.notice,/本镜已有队列任务/);assert.equal(TL.busy,false);assert.equal(referenceQueueLocks.size,0);
+ await vm.runInContext("tlAction('queue')",ctx);
+ assert.equal(D.jobs.length,1);assert.equal(prepared,1);assert.match(TL.notice,/已有待提交或正在执行/);assert.equal(TL.busy,false);
+});

@@ -25,9 +25,9 @@ function libraryRefresh(){
     group.querySelector('h1')?.replaceChildren(document.createTextNode(label));
     group.querySelector('#assetPackUrl_'+id)?.closest('.card')?.remove();
     group.querySelectorAll('.assetCard').forEach((card,index)=>{const asset=assets[index];if(!asset)return;card.querySelector('.library-health')?.remove();
-      const gaps=[!asset.notes?.trim()&&'缺描述',!asset.imageUrl?.trim()&&'缺参考图'].filter(Boolean);if(gaps.length)missing++;
-      const count=items('shots').filter(shot=>(shot[ref]||[]).includes(asset.id)).length;
-      card.dataset.incomplete=String(gaps.length>0);card.insertAdjacentHTML('beforeend',`<p class="library-health ${gaps.length?'needs-work':''}">${gaps.length?gaps.join(' · '):'描述与参考图已填写'}<br><span class="muted">${count?`已被 ${count} 个分镜引用`:'尚未被分镜引用'}</span></p>`);
+      const gaps=[!asset.notes?.trim()&&'缺描述',(typeof AssetIdentity==='undefined'||AssetIdentity.visualRequired(asset))&&!asset.imageUrl?.trim()&&'缺参考图'].filter(Boolean);if(gaps.length)missing++;
+      const count=items('shots').filter(shot=>!shot.autoArchived&&(shot[ref]||[]).includes(asset.id)).length;
+      card.dataset.incomplete=String(gaps.length>0);card.insertAdjacentHTML('beforeend',`<p class="library-health ${gaps.length?'needs-work':''}">${gaps.length?gaps.join(' · '):(typeof AssetIdentity!=='undefined'&&!AssetIdentity.visualRequired(asset)?'声音或提及资产 · 无需人物参考图':'描述与参考图已填写')}<br><span class="muted">${count?`已被 ${count} 个分镜引用`:'尚未被分镜引用'}</span></p>`);
     });
   }
   document.getElementById('librarySummary').textContent=`《${activeProject().name}》 · ${total} 项资产 · ${missing} 项待补充。参考图是否可读取将在生成前检查。`;

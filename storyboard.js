@@ -33,13 +33,13 @@ const referenceQueueLocks=new Set();
 async function queueById(id,button){
   const shot=D.shots.find(s=>s.id===id&&s.projectId===D.activeProjectId);if(!shot)return;
   const notice=document.getElementById('queue-status-'+id),notify=message=>{if(notice)notice.textContent=message;};
-  if(shotHasActiveJob(shot)){notify('已在队列中，请等待完成或取消后重试。');if(!button)alert('该镜头已有待提交或正在执行的任务，请等待完成或取消后重试。');return;}
+  if(shotHasActiveJob(shot)){notify('已在队列中，请等待完成或取消后重试。');if(!button)throw Error('该镜头已有待提交或正在执行的任务，请等待完成或取消后重试。');return;}
   if(referenceQueueLocks.has(shot.projectId)){notify('正在添加镜头，请稍后重试。');return;}referenceQueueLocks.add(shot.projectId);if(button)button.disabled=true;notify('正在添加…');
   try{
     if(typeof workflowPreflight==='function')await workflowPreflight([shot]);
     const job=await prepareStoryboardJob(shot),jobs=[...D.jobs,job],shots=D.shots.map(s=>s===shot?{...s,status:'等待 Worker'}:s);
     localStorage.setItem('aimovie_data',JSON.stringify({...D,jobs,shots}));D.jobs=jobs;D.shots=shots;notify('已成功加入生成队列。');
-  }catch(error){notify('添加失败：'+error.message);if(!button)alert('入队失败：'+error.message)}finally{referenceQueueLocks.delete(shot.projectId);if(button)button.disabled=false}
+  }catch(error){notify('添加失败：'+error.message);if(!button)throw Error('入队失败：'+error.message)}finally{referenceQueueLocks.delete(shot.projectId);if(button)button.disabled=false}
 }
 function redoGeneration(id){
   const generation=(D.generations||[]).find(g=>g.id===id&&g.projectId===D.activeProjectId);

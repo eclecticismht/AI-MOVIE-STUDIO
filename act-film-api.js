@@ -10,7 +10,8 @@ function validate(input){
   if(!a||typeof a.id!=='string'||!a.id||seen.has(a.id)||typeof a.title!=='string'||!Array.isArray(a.shots)||!a.shots.length||a.shots.length>160)throw Error('场次信息无效或重复');seen.add(a.id);
   return {projectId:input.projectId,scopeKey:input.scopeKey,actId:a.id,title:a.title.slice(0,120),shots:a.shots.map(s=>{
    if(!s||typeof s.shotId!=='string'||!s.shotId||shots.has(s.shotId))throw Error('场次包含无效或重复镜头');shots.add(s.shotId);
-   return {shotId:s.shotId,label:String(s.label||'镜头').slice(0,160),sequence:s.sequence};
+   if(s.sourceFingerprint!==undefined&&!/^[a-f0-9]{64}$/.test(s.sourceFingerprint))throw Error('分镜来源指纹无效');
+   return {shotId:s.shotId,label:String(s.label||'镜头').slice(0,160),sequence:s.sequence,...(s.sourceFingerprint?{sourceFingerprint:s.sourceFingerprint}:{})};
   })};
  });
 }
@@ -87,7 +88,7 @@ function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=t
   if(ticking)return;ticking=true;
   try{const all=await sources();for(const state of states.values()){
    if(!state.enabled)continue;const plan=structuredClone(state.plan),selected=choose(plan,all);state.missing=selected.missing;
-   if(selected.missing.length){state.status='waiting';const active=selected.selections.find(x=>!x.source?.ready&&x.source?.status==='rendering');state.message=active?`镜头正在制作${Number.isFinite(active.source.progress?.percent)?' · '+active.source.progress.percent+'%':''}，完成后自动合成本场`:`等待 ${selected.missing.length} 个镜头，齐全后自动合成`;save(state);continue}
+   if(selected.missing.length){state.status='waiting';const active=selected.selections.find(x=>!x.source?.ready&&x.source?.status==='rendering');state.message=selected.stale.length?`${selected.stale.length} 个镜头的分镜或资产已更新，旧视频保留；请生成当前版本后审片`:active?`镜头正在制作${Number.isFinite(active.source.progress?.percent)?' · '+active.source.progress.percent+'%':''}，完成后自动合成本场`:`等待 ${selected.missing.length} 个镜头，齐全后自动合成`;save(state);continue}
    const signature=signatureFor(plan,selected.selections);
    const latest=state.versions.at(-1);if(latest?.signature===signature){latest.warnings=reviewWarnings(selected.selections);state.status='ready';state.message=latest.approvedAt?'本场已通过':'本场成片已生成，待审片';save(state);continue}
    if(state.failedSignature===signature)continue;
@@ -104,7 +105,8 @@ function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=t
  function retry(id){const s=states.get(id);if(!s?.enabled)throw Error('场次不存在');s.failedSignature=null;save(s);if(autoTick)void tick().catch(()=>{})}
  function file(id,version){const s=states.get(id);if(!s?.versions.some(v=>v.id===version))throw Error('成片版本不存在');return path.join(root,id,version,'movie.mp4')}
  function setTitle(id,value){const s=states.get(id);if(!s?.enabled)throw Error('场次不存在');const card=titleCard(value);if(card)s.plan.titleCard=card;else delete s.plan.titleCard;s.failedSignature=null;s.status='waiting';s.message='片名设置已保存，镜头齐全后自动更新成片';save(s);if(autoTick)void tick().catch(()=>{});return publicState(s)}
- return {sync,list,tick,approve,retry,file,setTitle};
+ function note(id,input){const s=states.get(id),v=s?.versions.find(v=>v.id===input.versionId);if(!v)throw Error('成片版本不存在');const seconds=Number(input.seconds);if(!Number.isFinite(seconds)||seconds<0||seconds>v.duration||typeof input.text!=='string'||!input.text.trim()||input.text.length>2000)throw Error('请填写有效的时间和审片意见');const notes=v.notes||[];if(notes.length>=200)throw Error('本版审片意见已达上限');v.notes=[...notes,{id:crypto.randomUUID(),seconds,text:input.text.trim(),createdAt:new Date().toISOString()}];try{save(s)}catch(e){v.notes=notes;throw e}return publicState(s)}
+ return {sync,list,tick,approve,retry,file,setTitle,note};
 }
 function createActFilmApi(){
  const service=createService();const timer=setInterval(()=>service.tick().catch(()=>{}),5000);timer.unref();
@@ -116,13 +118,11 @@ function createActFilmApi(){
    const url=new URL(req.url,'http://localhost');
    if(pathname==='/api/act-films'&&req.method==='GET'){send(200,{acts:service.list(url.searchParams.get('projectId'),url.searchParams.get('scopeKey'))});return true}
    if(pathname==='/api/act-films'&&req.method==='POST'){send(200,{acts:await service.sync(JSON.parse(await require('./request-body').readUtf8(req,400000)))});return true}
-   const match=/^\/api\/act-films\/(act_[a-f0-9]{32})\/(?:(v_[a-f0-9]{24})\/video|(approve|retry|title))$/.exec(pathname);
+   const match=/^\/api\/act-films\/(act_[a-f0-9]{32})\/(?:(v_[a-f0-9]{24})\/video|(approve|retry|title|notes))$/.exec(pathname);
    if(!match)throw Error('场次接口不存在');
-   if(match[3]&&req.method==='POST'){const body=JSON.parse(await require('./request-body').readUtf8(req,2000)||'{}');send(200,match[3]==='title'?{act:service.setTitle(match[1],body.titleCard)}:match[3]==='approve'?{act:await service.approve(match[1],body.versionId)}:(service.retry(match[1]),{ok:true}));return true}
+   if(match[3]&&req.method==='POST'){const body=JSON.parse(await require('./request-body').readUtf8(req,10000)||'{}');send(200,match[3]==='notes'?{act:service.note(match[1],body)}:match[3]==='title'?{act:service.setTitle(match[1],body.titleCard)}:match[3]==='approve'?{act:await service.approve(match[1],body.versionId)}:(service.retry(match[1]),{ok:true}));return true}
    if(match[2]&&['GET','HEAD'].includes(req.method)){
-    const file=service.file(match[1],match[2]),size=fs.statSync(file).size,range=/^bytes=(\d+)-(\d*)$/.exec(req.headers.range||''),start=range?+range[1]:0,end=range?.[2]?Math.min(+range[2],size-1):size-1;
-    if(start>end||start>=size){res.writeHead(416,{'Content-Range':`bytes */${size}`});res.end();return true}
-    res.writeHead(range?206:200,{'Content-Type':'video/mp4','Accept-Ranges':'bytes','Content-Length':end-start+1,...(range?{'Content-Range':`bytes ${start}-${end}/${size}`}:{})});if(req.method==='HEAD')res.end();else fs.createReadStream(file).pipe(res);return true;
+    require('./media-response').sendFile(req,res,service.file(match[1],match[2]));return true;
    }throw Error('请求方式无效');
   }catch(e){if(!res.headersSent)send(400,{error:e.message});else res.destroy()}return true;
  };

@@ -1,15 +1,17 @@
 const AF={acts:[],key:'',preferredActId:null,registered:'',busy:false,selected:null,version:null,drafts:new Map(),error:'',approving:null,reviewError:'',reviewEpoch:0};
 function actFilmContext(){const p=activeProject(),batch=p.storyboardBatchId||(D.storyboardBatches||[]).filter(b=>b.projectId===p.id).at(-1)?.id;return {projectId:p.id,...ActFilm.context(D,batch)}}
-async function registerActFilms(){const context=actFilmContext();if(!context.scopeKey)return;const r=await fetch('/api/act-films',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(context)}),out=await r.json();if(!r.ok)throw Error(out.error||'场次自动合成注册失败，请重试');AF.registered=JSON.stringify(context)}
+async function actFilmPlan(){const p=activeProject(),batch=p.storyboardBatchId||(D.storyboardBatches||[]).filter(b=>b.projectId===p.id).at(-1)?.id;return ActFilm.snapshot(D,batch)}
+async function registerActFilms(){const context=await actFilmPlan();if(!context.scopeKey)return;const r=await fetch('/api/act-films',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(context)}),out=await r.json();if(!r.ok)throw Error(out.error||'场次自动合成注册失败，请重试');AF.registered=JSON.stringify(context)}
 async function syncActFilms(){
  const context=actFilmContext();if(!context.scopeKey)return;
- const key=context.projectId+'|'+context.scopeKey,signature=JSON.stringify(context);
+ const key=context.projectId+'|'+context.scopeKey;
  if(AF.busy||AF.approving)return;
  const reviewEpoch=AF.reviewEpoch;
  AF.busy=true;
  try{
   const saved=JSON.parse(localStorage.getItem('aimovie_data')||'null');
   if(saved&&JSON.stringify(saved.projects.find(p=>p.id===context.projectId)?.storyActs)!==JSON.stringify(activeProject().storyActs))throw Error('场次已在其他页面修改，请刷新后查看');
+  const signature=JSON.stringify(await actFilmPlan());
   const response=await fetch(AF.registered===signature?'/api/act-films?'+new URLSearchParams({projectId:context.projectId,scopeKey:context.scopeKey}):'/api/act-films',AF.registered===signature?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:signature});
   const out=await response.json();if(!response.ok)throw Error(out.error);
   if(reviewEpoch!==AF.reviewEpoch)return;
@@ -55,6 +57,7 @@ async function actFilmApprove(act,version,host){
  if(control.disabled)return;
  AF.approving=act.id;AF.reviewError='';AF.reviewEpoch++;renderActFilms();
  try{
+  await registerActFilms();
   const response=await fetch(`/api/act-films/${act.id}/approve`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({versionId:version.id}),signal:AbortSignal.timeout(15000)}),out=await response.json();
   if(!response.ok)throw Error(out.error||'保存失败，请重试');
   AF.acts=AF.acts.map(a=>a.id===act.id?out.act:a);

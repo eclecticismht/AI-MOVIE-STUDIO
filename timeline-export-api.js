@@ -68,7 +68,7 @@ async function timelineExportApi(req,res,pathname){
   try{
     if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)throw Error('请从本地工作室操作');
     if(pathname==='/api/timeline-media'&&req.method==='GET'){
-      const source=sourceLocation(new URL(req.url,'http://localhost').searchParams.get('url'));if(source.file){const stat=fs.statSync(source.file);res.writeHead(200,{'Content-Type':'video/mp4','Content-Length':stat.size});await pipeline(fs.createReadStream(source.file),res)}else{
+      const source=sourceLocation(new URL(req.url,'http://localhost').searchParams.get('url'));if(source.file){require('./media-response').sendFile(req,res,source.file)}else{
         const r=await fetch(source.url,{redirect:'error',headers:req.headers.range?{Range:req.headers.range}:{},signal:AbortSignal.timeout(60000)});res.writeHead(r.status,Object.fromEntries(['content-type','content-length','content-range','accept-ranges'].filter(k=>r.headers.has(k)).map(k=>[k,r.headers.get(k)])));await pipeline(Readable.fromWeb(r.body),res);
       }return true;
     }

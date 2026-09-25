@@ -1,0 +1,15 @@
+# 本机开发与验证
+
+运行环境为 Node.js 24、Windows PowerShell、FFmpeg 和本机 ComfyUI H3。`start-local-services.ps1 -NoBrowser` 启动 4173 工作台和 8080 Connector；ComfyUI 默认位于 8188，必须先就绪。`COMFY_URL` 配置 Connector 渲染地址；`FFMPEG_PATH` 配置视频工具。当前首帧与成片服务仍以本机 8188 为运行前提。
+
+`run-unit-tests.ps1` 只运行隔离的 `*.test.js`，不运行会消耗 GPU、调用模型或修改制作数据的 `test-*.js`。提交前还需运行 `node scripts/check-publish.js` 和 `git diff --check`。CI 重复运行同一套隔离测试。
+
+浏览器项目数据通过 `WorkspaceStore` 保存，带多页面覆盖保护；随后异步写入 `/api/workspace`。服务器使用版本校验和原子替换，保存 `.runtime/workspace/current.json` 及最近 20 个历史快照。保存条分别显示浏览器与磁盘状态；冲突时停止磁盘同步，由用户下载备份并选择保留版本。媒体仍在原有目录，JSON 备份不包含媒体。迁移机器时须同时保存 assets、film-runs、act-films、audio-assets、timeline-exports 等运行目录。
+
+`/api/studio-status` 只读检查 GPU、实时队列、H3 模型与节点、FFmpeg 和当前输出规格。Connector 的 `queued` 是实时等待数，`historyCount` 是保留记录数，离线时队列为 null。
+
+场次合成逐镜核对当前分镜与参考资产指纹。历史视频继续保留，但分镜改动后必须生成对应新版本才能批准。审片意见记录版本与播放时间。当前导出为 1280 × 720、24 fps；项目中的 4K 目标不代表实际已生成 4K。
+
+Connector 在提交前持久化固定随机种子、实际工作流与提交编号；响应丢失后从渲染队列和历史找回。结果未知时阻止自动重发，避免重复消耗 GPU。
+
+真实短片验收必须查看生成画面、身份与服装、道具、动作、对白和连续性，并检查最终编码与声音。测试通过或参考绑定正确不能代替成片验收。

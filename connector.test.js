@@ -16,7 +16,7 @@ function harness(fetchImpl) {
   const context=vm.createContext({
     require(name) {
       if(name==='http')return {createServer(fn){handler=fn;return {listen(){}}}};
-      if(name==='fs')return {readFileSync(){return saved},writeFileSync(path,value){saved=value}};
+      if(name==='fs')return {readFileSync(){return saved},writeFileSync(path,value){saved=value},renameSync(){}};
       return require(name);
     },
     __dirname:__dirname,process:{env:{}},console,Buffer,fetch:async(...args)=>{const r=await fetchImpl(...args);if(!r.text)r.text=async()=>JSON.stringify(await r.json());return r;},AbortSignal,URL

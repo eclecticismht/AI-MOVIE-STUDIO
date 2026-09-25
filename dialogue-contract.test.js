@@ -35,7 +35,9 @@ test('turns cannot exceed duration or silently mix multiple speaking characters'
   assert.throws(()=>bindDialogue('visual',parseDialogue('甲：你好。 乙：再见。',chars),10),/多个说话人物/);
   assert.throws(()=>bindDialogue('visual',parseDialogue('甲：'+ '字'.repeat(50),chars),4),/台词过长/);
   assert.throws(()=>bindDialogue('old <d>wrong words</d>',[],5),/未校验台词/);
-  assert.ok(bindDialogue('visual',[],5).includes('No spoken words'));
+  const silent=bindDialogue('visual',[],5);
+  assert.ok(silent.includes('No spoken words'));
+  assert.ok(!silent.includes('All visible people keep their mouths closed')&&silent.includes('do not speak or perform speech-like lip movements')&&silent.includes('including eating, chewing, drinking and breathing'),'Silent shots must allow natural eating and drinking without speech-like lip movements');
 });
 test('speaker binds to the matching visual reference, not the first image',()=>{
   const p=bindDialogue('visual',parseDialogue('乙：再见。',chars),5,[{assetId:'scene'},{assetId:'b'}]);

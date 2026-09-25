@@ -12,7 +12,7 @@ function prepareScreenplayAssets(bundle,projectId,scriptId) {
     const nameKey=name=>name.normalize('NFKC').replace(/\s+/g,'').toLowerCase();
     for(const item of bundle[kind]) {
       if(!item||['name','type','notes'].some(key=>typeof item[key]!=='string'||!item[key].trim()))throw new Error('资产清单格式不正确，请重新生成。');
-      let asset=collections[kind].find(a=>a.projectId===projectId&&nameKey(a.name)===nameKey(item.name));
+      let asset=typeof AssetIdentity==='undefined'?collections[kind].find(a=>a.projectId===projectId&&nameKey(a.name)===nameKey(item.name)):AssetIdentity.find(collections[kind],D.projects.find(p=>p.id===projectId),kind,item.name);
       if(!asset) {
         const used=new Set(collections[kind].filter(a=>a.projectId===projectId).map(a=>a.assetId));let n=1;
         while(used.has(prefix+'_'+String(n).padStart(3,'0')))n++;

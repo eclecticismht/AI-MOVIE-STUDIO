@@ -1,0 +1,10 @@
+const actFilmReviewRender=renderActFilms;
+renderActFilms=function(){
+ actFilmReviewRender();const host=document.getElementById('actFilmPanel'),{act,version}=actFilmCurrent();if(!host||!version)return;
+ let panel=host.querySelector('#actFilmReviewNotes');if(!panel){panel=document.createElement('div');panel.id='actFilmReviewNotes';host.append(panel)}
+ const signature=JSON.stringify([version.id,version.notes]);if(panel.dataset.signature===signature)return;panel.dataset.signature=signature;
+ const previous=act.versions[act.versions.findIndex(v=>v.id===version.id)-1];
+ panel.innerHTML=`<details><summary>记录当前时间的审片意见 · ${(version.notes||[]).length} 条</summary><label>画面、对白或声音问题<textarea id="actFilmNote" rows="2" maxlength="2000" placeholder="例如：00:18 端杯时手指变形；新闻播报盖过餐馆环境声"></textarea></label><button class="btn" id="actFilmSaveNote">记录到当前播放位置</button><p role="status" id="actFilmNoteStatus"></p>${(version.notes||[]).map(n=>`<p><button class="btn" data-review-seconds="${n.seconds}">${n.seconds.toFixed(1)} 秒</button> ${esc(n.text)}</p>`).join('')}</details>${previous?`<details><summary>对照上一版（两个播放器可独立播放）</summary><video controls preload="metadata" src="${esc(previous.url)}" style="width:100%"></video><p class="muted">上方为当前选择版本，此播放器为其上一版。</p></details>`:''}`;
+ panel.querySelectorAll('[data-review-seconds]').forEach(button=>button.onclick=()=>{host.querySelector('#actFilmVideo').currentTime=Number(button.dataset.reviewSeconds)});
+ panel.querySelector('#actFilmSaveNote').onclick=async()=>{const input=panel.querySelector('#actFilmNote'),status=panel.querySelector('#actFilmNoteStatus'),text=input.value.trim(),seconds=host.querySelector('#actFilmVideo')?.currentTime||0;if(!text){input.focus();return}try{const r=await fetch(`/api/act-films/${act.id}/notes`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({versionId:version.id,seconds,text})}),out=await r.json();if(!r.ok)throw Error(out.error);AF.acts=AF.acts.map(a=>a.id===act.id?out.act:a);renderActFilms()}catch(e){status.textContent='未能保存：'+e.message}};
+};

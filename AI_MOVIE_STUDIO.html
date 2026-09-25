@@ -59,7 +59,7 @@ body>main{min-width:0}
 <section id="edit" class="page"><h1>剪辑中心</h1><p class="muted">MASTER 镜头 → 自动素材整理 → 粗剪 → Premiere Pro。</p>
 <div class="card"><b>Premiere Pro 主工作流</b><p>后续输出：素材清单、字幕、对白音轨、音乐音轨、镜头顺序与工程交换文件。</p></div></section>
 
-<section id="masters" class="page"><h1>成片中心</h1><p class="muted">只有最终进入成片的 MASTER 才执行4K，避免浪费GPU。</p>
+<section id="masters" class="page"><h1>成片中心</h1><p class="muted">当前成片导出为 1280 × 720、24 fps。生成尺寸可在项目中设置；4K 是项目目标，尚未接入放大交付。</p>
 <div class="grid"><div class="card"><b>MASTER素材</b><p>导演通过镜头</p></div><div class="card"><b>4K队列</b><p>最终素材后处理</p></div><div class="card"><b>正式成片</b><p>横版主片</p></div><div class="card"><b>宣传版本</b><p>预告 / 竖版 / 封面</p></div></div></section>
 <section id="projects" class="page"><h1>项目管理</h1><p class="muted">创建、切换和管理你的 AI 影视项目。</p>
 <div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><div><h3>项目中心</h3><p class="muted">每个项目拥有独立的故事、剧本、资产、分镜、生成、审片、声音、剪辑与数据。</p></div><button class="btn gold" onclick="openWizard()">+ 新建项目</button></div></div>
@@ -67,13 +67,15 @@ body>main{min-width:0}
 <div class="wizardSteps" id="wizardSteps"></div>
 <div class="wizardLayout"><div class="card"><div id="wizardBody"></div><div style="display:flex;justify-content:space-between;margin-top:18px"><button class="btn" onclick="wizardBack()">← 上一步</button><div><button class="btn" onclick="saveDraft()">保存草稿</button> <button class="btn gold" id="wizardNext" onclick="wizardNext()">下一步 →</button></div></div></div>
 <div class="card previewCard"><h3>项目实时预览</h3><div id="wizardPreview"></div></div></div></div>
-<div id="projectList"></div></section><section id="shots" class="page"><h1>分镜生产台</h1><button class="btn gold" onclick="addShot()">+ 新建镜头</button><p class="muted">这一版无需安装 Python，数据保存在浏览器本机。</p><table><thead><tr><th>镜头</th><th>画面</th><th>角色</th><th>场景</th><th>秒</th><th>状态</th><th>操作</th></tr></thead><tbody id="shotrows"></tbody></table><div class="card" id="editor" style="display:none"><h3 id="editTitle"></h3><textarea id="prompt"></textarea><p><button class="btn gold" onclick="savePrompt()">保存 Prompt</button></p></div></section>
+<div id="projectList"></div></section><section id="shots" class="page"><h1>分镜生产台</h1><button class="btn gold" onclick="addShot()">+ 新建镜头</button><p class="muted">这一版无需安装 Python，数据保存在浏览器，并自动备份到本机磁盘。</p><table><thead><tr><th>镜头</th><th>画面</th><th>角色</th><th>场景</th><th>秒</th><th>状态</th><th>操作</th></tr></thead><tbody id="shotrows"></tbody></table><div class="card" id="editor" style="display:none"><h3 id="editTitle"></h3><textarea id="prompt"></textarea><p><button class="btn gold" onclick="savePrompt()">保存 Prompt</button></p></div></section>
 <section id="gen" class="page"><h1>AI 生成队列</h1><div class="card"><b>NODE_01 · RTX Pro 4000 24GB</b><p class="warn">本版先保证工作台零安装可打开。真实 H3 Worker 下一版通过本地 Connector 接入。</p></div><table><thead><tr><th>任务</th><th>镜头</th><th>状态</th></tr></thead><tbody id="jobs"></tbody></table></section>
 <section id="review" class="page"><h1>导演审片室</h1><div class="card muted">真实 H3 接入后，这里显示 v001 / v002 / v003 视频并选择 MASTER。</div></section>
 <section id="assets" class="page"><h1>资产中心</h1><div class="grid"><div class="card"><b>角色</b><p>陈伟 CW_001</p><p>李娜 LN_001</p></div><div class="card"><b>场景</b><p>办公室</p><p>未来城市CBD</p></div><div class="card"><b>道具</b><p>人生评分 APP</p></div></div></section>
 <section id="data" class="page"><h1>300 / 90 数据</h1><div class="card">目标：300分钟 / 90天 · 要求平均日产约 3.33 分钟最终成片。</div></section>
 <section id="settings" class="page"><h1>设置</h1><div class="card"><b class="ok">✓ Web 工作台：已运行</b><p>数据：浏览器 localStorage</p><p>Render Node：等待 Connector</p><p>Minimax H3：等待 Connector</p><p class="muted">请使用下方工作区备份与恢复管理数据。</p></div></section>
+<script src="workspace-store.js"></script>
 <script>
+const localStorage=WorkspaceStore.create(globalThis.localStorage,{onSave:value=>{if(typeof workspaceChanged==='function')workspaceChanged(value)},onFailure:(error,raw)=>{if(raw)D=JSON.parse(raw);if(typeof workspaceStatus==='function')workspaceStatus('保存失败，内存数据已回到上次保存版本：'+error.message);else alert(error.message)}});
 const INITIAL={"project": {"name": "人生评分99分", "universe": "未来人间", "target": 15}, "shots": [{"id": "S01_SH001", "desc": "未来城市建立镜头", "char": "—", "scene": "未来城市CBD", "dur": 5, "status": "待制作", "prompt": "写实电影感，未来中国城市清晨，社会评分系统融入日常环境。"}, {"id": "S01_SH002", "desc": "陈伟进入办公室", "char": "陈伟", "scene": "办公室", "dur": 6, "status": "待制作", "prompt": "陈伟进入现代办公室，中年精英感，自然表演，稳定跟拍。"}, {"id": "S01_SH003", "desc": "人生评分手机特写", "char": "陈伟", "scene": "办公室", "dur": 4, "status": "待制作", "prompt": "手机显示人生评分98.7，轻微俯拍，slow push in，不安。"}, {"id": "S01_SH004", "desc": "陈伟表情变化", "char": "陈伟", "scene": "办公室", "dur": 5, "status": "待制作", "prompt": "陈伟从平静转为疑惑不安，微表情，浅景深。"}], "jobs": [], "generations": [], "node": {"name": "NODE_01", "gpu": "RTX Pro 4000 24GB", "status": "未连接"}}; let D=JSON.parse(localStorage.getItem("aimovie_data")||JSON.stringify(INITIAL)),editing=null;
 function migrate(){
  if(!D.projects){D.projects=[D.project||{id:"P001",name:"人生评分99分",universe:"未来人间",type:"旗舰作品",target:15,status:"制作中"}];delete D.project}
@@ -228,7 +230,7 @@ function renderReview(){let a=items("generations");document.querySelector("#revi
 async function approveMaster(id){return approveCurrentMaster(id)}
 function redoGeneration(id){let g=D.generations.find(x=>x.id===id),sh=D.shots.find(x=>x.id===g.shot);g.status="需重做";sh.status="需重做";persist()}
 function renderAudio(){let a=items("audio");document.querySelector("#audio").innerHTML=`<h1>声音中心</h1><div class="toolbar"><button class="btn gold" onclick="newAudio()">+ 添加声音任务</button><span class="muted">对白、旁白、音乐、环境声统一跟踪；MASTER 通过会自动建立交付清单。</span></div>${a.map(x=>`<div class="card"><b>${esc(x.name)}</b><p class="assetMeta">${esc(x.shot||"项目级")} · ${esc(x.type)} · ${esc(x.status)}</p></div>`).join("")||'<div class="card empty">尚无声音任务。</div>'}`}
-function newAudio(){let name=prompt("声音任务名称");if(!name)return;D.audio.push({id:uid("AUD"),projectId:D.activeProjectId,name,type:"对白",status:"待制作"});persist()}
+function newAudio(){if(document.getElementById("audioTaskDialog")){document.getElementById("audioTaskName").focus();return}const dialog=document.createElement("dialog");dialog.id="audioTaskDialog";dialog.className="source-sync-dialog";dialog.innerHTML='<form><header><h2>添加声音任务</h2></header><label for="audioTaskName">声音任务名称</label><input id="audioTaskName" type="text" autocomplete="off"><p id="audioTaskError" role="alert"></p><footer><button class="btn" type="button" data-cancel>取消</button><button class="btn gold" type="submit">添加</button></footer></form>';const form=dialog.querySelector("form"),input=dialog.querySelector("#audioTaskName"),error=dialog.querySelector("#audioTaskError");let task=null,saving=false,saved=false;form.addEventListener("submit",event=>{event.preventDefault();if(saving)return;const name=input.value.trim();if(!name){error.textContent="请输入声音任务名称。";input.focus();return}saving=true;error.textContent="";if(task)task.name=name;else{task={id:uid("AUD"),projectId:D.activeProjectId,name,type:"对白",status:"待制作"};D.audio.push(task)}try{persist();saved=true;dialog.close()}catch(e){error.textContent="保存失败："+(e.message||"请检查浏览器存储空间并重试。");saving=false;input.focus()}});dialog.querySelector("[data-cancel]").addEventListener("click",()=>dialog.close());dialog.addEventListener("close",()=>{if(task&&!saved){const index=D.audio.findIndex(item=>item.id===task.id);if(index>=0)D.audio.splice(index,1);try{persist()}catch(e){}}dialog.remove()},{once:true});document.body.append(dialog);dialog.showModal();input.focus()}
 function renderEdit(){let a=items("masters");document.querySelector("#edit").innerHTML=`<h1>Premiere 交付中心</h1><div class="card"><b>可交付 MASTER：${a.length}</b><p class="muted">导出包含 MASTER、时长与 4K 状态的 CSV 镜头清单，供 Premiere Pro 建立序列前核对。</p><button class="btn gold" onclick="exportPremiere()">下载 Premiere 清单 CSV</button></div>`}
 async function exportPremiere(){let a=items("masters");const baseline=JSON.stringify(D);for(const m of a)if(!await masterSourceIsCurrent(m))return alert("清单包含来源已变化或缺少版本记录的 MASTER，请重新审片后导出。");if(baseline!==JSON.stringify(D))return alert("项目发生变化，请重新导出。");let csv=["project_id,project_name,shot_id,status,resolution,duration_seconds"].concat(a.map(m=>{let s=D.shots.find(x=>x.id===m.shot)||{};return [D.activeProjectId,activeProject().name,m.shot,m.status,m.resolution,s.dur||0].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")})).join("\n"),blob=new Blob([csv],{type:"text/csv;charset=utf-8"}),url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download="AI_MOVIE_STUDIO_"+D.activeProjectId+"_PREMIERE_MANIFEST.csv";link.click();URL.revokeObjectURL(url);D.exports.push({id:uid("PR"),projectId:D.activeProjectId,type:"Premiere CSV 清单",count:a.length,createdAt:new Date().toLocaleString()});persist()}
 function renderMasters(){let a=items("masters");document.querySelector("#masters").innerHTML=`<h1>MASTER 与 4K 成片</h1><p class="muted">最终通过素材才执行 4K，控制 GPU 成本。</p>${a.map(x=>`<div class="card"><b>${esc(x.shot)}</b><p class="assetMeta">${esc(x.status)} · ${esc(x.resolution)}</p><p class="muted">4K 超分辨率尚未接入；当前不会提交超分任务。</p></div>`).join("")||'<div class="card empty">尚无 MASTER。</div>'}`}
@@ -356,6 +358,7 @@ setInterval(()=>{if(document.getElementById("gen")?.classList.contains("on"))ren
 </script>
 <script src="ui-errors.js"></script>
 <script src="screen-layout.js"></script>
+<script src="asset-identity.js"></script>
 <script src="screenplay.js"></script>
 <script src="h3-controls.js"></script>
 <script src="storyboard-segments.js"></script>
@@ -384,6 +387,7 @@ setInterval(()=>{if(document.getElementById("gen")?.classList.contains("on"))ren
 <script src="first-frame-ui.js"></script>
 <script src="project-backup.js"></script>
 <script src="project-backup-ui.js"></script>
+<script src="workspace-store-ui.js"></script>
 <script src="workflow-guide.js"></script>
 <script src="workflow-guide-ui.js"></script>
 <link rel="stylesheet" href="timeline.css">
@@ -393,6 +397,7 @@ setInterval(()=>{if(document.getElementById("gen")?.classList.contains("on"))ren
 <script src="timeline-edit-ui.js"></script>
 <link rel="stylesheet" href="creative-workspace.css">
 <script src="creative-workspace.js"></script>
+<script src="asset-identity-ui.js"></script>
 <script src="story-flow-model.js"></script>
 <script src="story-flow-ui.js"></script>
 <script src="asset-bulk-ui.js"></script>
@@ -424,5 +429,7 @@ setInterval(()=>{if(document.getElementById("gen")?.classList.contains("on"))ren
 <link rel="stylesheet" href="workspace-polish.css">
 <script src="act-film.js"></script>
 <script src="act-film-ui.js"></script>
+<script src="act-film-review-ui.js"></script>
+<script src="studio-status-ui.js"></script>
 <link rel="stylesheet" href="act-film.css">
 <script>upgrade();renderAll();</script></main></body></html>

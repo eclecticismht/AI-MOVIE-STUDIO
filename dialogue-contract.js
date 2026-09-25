@@ -81,7 +81,7 @@
     const extra=speech.length?speech.map(e=>{
       const i=references.findIndex(r=>r.assetId===e.speakerId),subject=speakerPosition&&e.delivery==='onscreen'?`the person on the viewer’s ${speakerPosition} (${e.speakerName})`:i>=0?`<Subject ${i+1}> (${e.speakerName})`:e.speakerName;
       return `${subject} (S1), ${e.delivery==='phone'?'heard ONLY through the phone loudspeaker, physically off-screen':e.delivery==='offscreen'?'off-screen voice only':'the sole visible speaking character'}, says exactly <d>[Chinese]${e.text}</d>. All other visible people keep their mouths closed. Do not change words, add speech, or move this voice to another character.`;
-    }).join('\n'):'No spoken words, narration, singing or intelligible voices. All visible people keep their mouths closed.';
+    }).join('\n'):'No spoken words, narration, singing or intelligible voices. Visible people do not speak or perform speech-like lip movements. Allow natural mouth movement required by the scripted actions, including eating, chewing, drinking and breathing.';
     const boundary=prompt.indexOf('overall_soundscape:');
     const instruction='\n\nSpoken performance (authoritative):\n'+extra+'\nOn-screen text messages are silent and must never be spoken. Do not draw dialogue subtitles, captions, speaker labels or karaoke text onto the video; dialogue is audio only. Any explicitly requested device-screen content stays inside that device.\n\n';
     return boundary<0?prompt+instruction:prompt.slice(0,boundary)+instruction+prompt.slice(boundary);
