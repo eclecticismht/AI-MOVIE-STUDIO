@@ -192,6 +192,9 @@ function retryPlan(run,index,revision){
     const visible=items=>items.filter(e=>e.type==='speech'&&e.delivery==='onscreen').map(e=>e.speakerId).join('|');
     if(original.firstFrame&&visible(events)!==visible(original.dialogueEvents))throw Error('首帧镜头的画内发声人物已改变，请回分镜重新确认人物位置后制作');
     replacement={...original,...(revision.cropBottomPercent!==undefined?{cropBottomPercent:Framing.validateBottomCrop(revision.cropBottomPercent)}:{}),...(revision.renderMode!==undefined?{renderMode:revision.renderMode,screenAssetId:revision.screenAssetId,screenSource:revision.screenSource,screenImagePercent:revision.screenImagePercent,screenCards:revision.screenCards??original.screenCards}:{}),prompt:revision.prompt,duration:revision.duration,subtitle:revision.subtitle,dialogueEvents:events,...(revision.firstFrame!==undefined?{firstFrame:validateFirstFrame(revision.firstFrame)}:{}),...(revision.audioMode!==undefined?{audioMode:revision.audioMode,audioAsset:revision.audioAsset}: {})};
+    // An explicitly replaced opening frame starts a new continuity segment.
+    // Otherwise the previous clip's tail would reject or override this repair.
+    if(revision.firstFrame?.file&&revision.firstFrame.file!==original.firstFrame?.file){delete replacement.continueFromShotId;delete replacement.continuitySpeakerPosition;}
   }
   if(revision?.characterReferenceFiles!==undefined){
     const files=revision.characterReferenceFiles;

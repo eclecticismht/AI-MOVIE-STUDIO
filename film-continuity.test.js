@@ -22,3 +22,9 @@ test('continuation rejects changed asset images or identities, but allows new ac
  p.shots[1].references[0].file='ams-ref-'+ 'b'.repeat(64)+'.png';assert.throws(()=>validatePlan(p),/参考资产或图片/);
  p.shots[1].references[0]={...ref,assetId:'other'};assert.throws(()=>validatePlan(p),/参考资产或图片/);
 });
+
+test('an explicit replacement frame repairs a continuation without reusing the faulty previous tail',()=>{
+ const p={...validatePlan(plan()),id:'film_0000000000000000',status:'paused'};p.shots.forEach(s=>s.ready=true);
+ const frame={file:'ams-ref-'+ 'b'.repeat(64)+'.png'},child=retryPlan(p,1,{prompt:'The corrected toast.',subtitle:'',duration:4,firstFrame:frame});
+ assert.equal(child.shots[1].firstFrame.file,frame.file);assert.equal(child.shots[1].continueFromShotId,undefined);assert.equal(child.shots[2].continueFromShotId,'b');assert.deepEqual(child.retriedShots,[2,3]);assert.equal(p.shots[1].continueFromShotId,'a');assert.equal(p.shots[1].ready,true);
+});
