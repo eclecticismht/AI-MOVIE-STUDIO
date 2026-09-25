@@ -34,7 +34,7 @@ function renderDimensions(job) {
 }
 
 try { JSON.parse(fs.readFileSync(queueFile, "utf8")).forEach(job => jobs.set(job.id, job)); } catch (error) { if (error.code !== "ENOENT") console.warn("Could not restore connector queue:", error.message); }
-function persistQueue() { fs.writeFileSync(queueFile+'.tmp', JSON.stringify([...jobs.values()], null, 2)); fs.renameSync(queueFile+'.tmp',queueFile); }
+function persistQueue() { fs.writeFileSync(queueFile+'.tmp', JSON.stringify([...jobs.values()], null, 2)); require('./replace-file').replaceFileSync(queueFile+'.tmp',queueFile,fs); }
 function h3FrameCount(seconds) { return Math.max(5, 17 * Math.round((Math.max(4, Math.min(15, Number(seconds) || 5)) * 24 - 5) / 17) + 5); }
 function comfyGraph(job) { if(job.firstFrame&&(job.references||[]).some(r=>['images','videos'].includes(r.kind)))throw Error('上传参考素材不能与独立首帧同时使用'); const frames=h3FrameCount(job.duration), prompt=job.dialogueEvents?DialogueContract.bindDialogue(job.prompt,job.dialogueEvents,job.duration,job.references||[]):job.prompt, prefix="AI_MOVIE_STUDIO/"+job.id,dimensions=renderDimensions(job),refs=validateReferences(job.references); const graph= {
   "1":{class_type:"UNETLoader",inputs:{unet_name:"Minimax_H3\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",weight_dtype:"default"}},
