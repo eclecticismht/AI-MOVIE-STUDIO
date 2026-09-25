@@ -150,8 +150,9 @@ async function work(run){
     // Keep original model audio intact; create a reversible composition-only silent track.
     for(const [i,shot] of run.shots.entries())if(ShotAudio.validate(shot.audioMode,shot.dialogueEvents,shot.audioAsset)!=='model'){
       const soundInput=shot.audioMode==='voiceover'?['-i',resolveAudioAsset(shot.audioAsset)]:['replacement','overlay'].includes(shot.audioMode)?['-stream_loop','-1','-i',resolveAudioAsset(shot.audioAsset)]:['-f','lavfi','-i','anullsrc=r=48000:cl=stereo'];
-      run.current={index:i+1,stage:shot.audioMode==='overlay'?'叠加音效并保留对白':['replacement','overlay','voiceover'].includes(shot.audioMode)?'合成独立环境音（不保留模型人声）':'生成整镜静音版本（同时移除环境声）'};save(run);
-      await command(['-y','-i',path.join(dir,`clip-${i}.mp4`),...soundInput,...(shot.audioMode==='overlay'?['-filter_complex','[1:a]volume=0.25[fx];[0:a][fx]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[mix]','-map','0:v:0','-map','[mix]']:['-map','0:v:0','-map','1:a:0']),...(shot.audioMode==='voiceover'?['-af','apad']:[]),'-c:v','copy','-c:a','aac','-shortest',path.join(dir,`sound-${i}.mp4`)],path.join(dir,`sound-${i}.log`));
+      run.current={index:i+1,stage:shot.audioMode==='overlay'?'叠加音效并保留对白':shot.audioMode==='voiceover'?'合成独立画外声':['replacement','overlay'].includes(shot.audioMode)?'合成独立环境音（不保留模型人声）':'生成整镜静音版本（同时移除环境声）'};save(run);
+      const soundDuration=(17*Math.round((shot.duration*24-5)/17)+5)/24;
+      await command(['-y','-i',path.join(dir,`clip-${i}.mp4`),...soundInput,...(shot.audioMode==='overlay'?['-filter_complex','[1:a]volume=0.25[fx];[0:a][fx]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[mix]','-map','0:v:0','-map','[mix]']:['-map','0:v:0','-map','1:a:0']),...(shot.audioMode==='voiceover'?['-af','apad=whole_dur='+soundDuration,'-t',String(soundDuration)]:[]),'-c:v','copy','-c:a','aac','-shortest',path.join(dir,`sound-${i}.mp4`)],path.join(dir,`sound-${i}.log`));
     }
     for(const [i,shot] of run.shots.entries())if(Framing.validateBottomCrop(shot.cropBottomPercent)>0){
       run.current={index:i+1,stage:'整理画面边缘（保留原始素材）'};save(run);

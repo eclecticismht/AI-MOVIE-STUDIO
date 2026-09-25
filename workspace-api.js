@@ -25,7 +25,7 @@ function createWorkspaceApi(store=createStore()){
   try{
    if(req.method==='GET')send(200,store.read());
    else if(req.method==='PUT'){
-    let text='',size=0;for await(const chunk of req){size+=Buffer.byteLength(chunk);if(size>50*1024*1024)throw Error('工作区超过 50 MB，请将内嵌媒体导入素材目录');text+=chunk}
+    const text=await require('./request-body').readUtf8(req,50*1024*1024,'工作区超过 50 MB，请将内嵌媒体导入素材目录');
     const body=JSON.parse(text),saved=store.save(body.data,body.baseRevision);send(200,{revision:saved.revision,savedAt:saved.savedAt});
    }else send(405,{error:'不支持此操作'});
   }catch(error){send(error.status||400,{error:error.message})}

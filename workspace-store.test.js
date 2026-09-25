@@ -11,3 +11,13 @@ test('workspace adapter blocks cross-tab lost updates and rolls back after quota
  let raw='{"x":1}',fail=false,saved=0,rollback;const native={getItem:()=>raw,setItem(k,v){if(fail)throw Error('quota');raw=v}},adapter=create(native,{onSave:()=>saved++,onFailure:(e,value)=>rollback=value});
  adapter.setItem('aimovie_data','{"x":2}');assert.equal(saved,1);fail=true;assert.throws(()=>adapter.setItem('aimovie_data','{"x":3}'),/quota/);assert.equal(rollback,'{"x":2}');fail=false;raw='{"x":4}';assert.throws(()=>adapter.setItem('aimovie_data','{"x":5}'),/其他页面/);assert.equal(raw,'{"x":4}');
 });
+
+test('workspace HTTP save preserves Chinese text split inside UTF-8 network characters',async t=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ams-workspace-utf8-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));
+ const store=createStore(dir),api=require('./workspace-api').createWorkspaceApi(store),payload=data('西门清的电影'),bytes=Buffer.from(JSON.stringify({baseRevision:null,data:payload}));
+ const req={method:'PUT',async *[Symbol.asyncIterator](){for(const byte of bytes)yield Buffer.from([byte])}};let status,response;
+ await api(req,{writeHead(n){status=n},end(value){response=JSON.parse(value)}},'/api/workspace');
+ assert.equal(status,200,response.error);assert.deepEqual(store.read().data,payload);
+ const malformed={method:'PUT',async *[Symbol.asyncIterator](){yield Buffer.from([0xe4,0xb8])}};
+ await api(malformed,{writeHead(n){status=n},end(){}},'/api/workspace');assert.equal(status,400);assert.deepEqual(store.read().data,payload);
+});
