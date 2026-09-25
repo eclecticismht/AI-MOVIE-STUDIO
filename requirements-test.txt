@@ -1,0 +1,3 @@
+# Document extraction and PDF fixtures used by story-document.test.js.
+pypdf==6.10.0
+reportlab==4.4.9

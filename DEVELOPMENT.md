@@ -4,6 +4,8 @@
 
 `run-unit-tests.ps1` 只运行隔离的 `*.test.js`，不运行会消耗 GPU、调用模型或修改制作数据的 `test-*.js`。提交前还需运行 `node scripts/check-publish.js` 和 `git diff --check`。CI 重复运行同一套隔离测试。
 
+文档导入测试还需要 Python、pypdf 和 reportlab。新环境执行 `python -m pip install -r requirements-test.txt`，再将 `STORY_PYTHON` 设为该 Python 可执行文件的绝对路径。CI 使用 Python 3.12 并显式安装这些依赖，不依赖开发机的 Codex 缓存目录。
+
 浏览器项目数据通过 `WorkspaceStore` 保存，带多页面覆盖保护；随后异步写入 `/api/workspace`。服务器使用版本校验和原子替换，保存 `.runtime/workspace/current.json` 及最近 20 个历史快照。保存条分别显示浏览器与磁盘状态；冲突时停止磁盘同步，由用户下载备份并选择保留版本。媒体仍在原有目录，JSON 备份不包含媒体。迁移机器时须同时保存 assets、film-runs、act-films、audio-assets、timeline-exports 等运行目录。
 
 `/api/studio-status` 只读检查 GPU、实时队列、H3 模型与节点、FFmpeg 和当前输出规格。Connector 的 `queued` 是实时等待数，`historyCount` 是保留记录数，离线时队列为 null。
