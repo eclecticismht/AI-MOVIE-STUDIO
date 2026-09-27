@@ -175,3 +175,22 @@ test('sync failures preserve state and repeated results create one review entry'
   assert.equal(data.shots[0].status,'待审核');
   assert.equal(data.jobs[0].comfyPromptId,'p1');
 });
+
+test('H3 attention acceleration is opt-in and preserves the first frame and sampling contract',async()=>{
+ const request=harness(async()=>reply({})),firstFrame={file:'ams-ref-'+ 'c'.repeat(64)+'.png'};
+ await request('POST','/jobs',{...job,id:'native-attention',firstFrame,dialogueEvents:[]});
+ const native=(await request('GET','/jobs/native-attention/graph')).data.prompt;
+ assert.deepEqual(native['5'].inputs.model,['1',0]);assert.equal(native['901'],undefined);
+ const accepted=await request('POST','/jobs',{...job,id:'sage-attention',firstFrame,dialogueEvents:[],h3Attention:'sage'});
+ assert.equal(accepted.status,202);assert.equal(accepted.data.job.h3Attention,'sage');
+ const sage=(await request('GET','/jobs/sage-attention/graph')).data.prompt;
+ assert.equal(sage['901'].class_type,'PathchSageAttentionKJ');assert.equal(sage['902'].class_type,'MiniMaxH3MemoryEfficientSageAttentionPatch');
+ assert.deepEqual(sage['5'].inputs.model,['902',0]);assert.equal(sage['5'].inputs.steps,25);
+ assert.equal(sage['20'].inputs.image,firstFrame.file);assert.equal(sage['8'].inputs.prompt,native['8'].inputs.prompt);
+ for(const k of ['width','height','frame_rate','total_frames','sampler','scheduler','cfg'])assert.equal(sage['5'].inputs[k],native['5'].inputs[k]);
+});
+test('invalid H3 attention mode is rejected before a queue record is created',async()=>{
+ const request=harness(async()=>reply({}));
+ assert.equal((await request('POST','/jobs',{...job,id:'bad-attention',h3Attention:'unknown'})).status,400);
+ assert.equal((await request('GET','/jobs')).data.jobs.length,0);
+});
