@@ -45,7 +45,7 @@ test('approved performance conditions H3 with the same source waveform in the ge
  assert.equal((await request('POST','/jobs',{...job,duration:4,performanceAudio:binding,dialogueEvents:events})).status,202);
  const graph=(await request('GET','/jobs/test/graph')).data.prompt;
  assert.match(graph['1'].inputs.unet_name,/ref2va/);assert.equal(graph['60'].class_type,'LoadAudio');assert.equal(graph['60'].inputs.audio,binding.file);
- assert.deepEqual(graph['8'].inputs['ref_audios.ref_audio_0'],['60',0]);assert.deepEqual(graph['5'].inputs.audio_vae,['4',0]);assert.deepEqual(graph['6'].inputs.audio,['60',0]);assert.equal(JSON.parse(graph['5'].inputs.timeline_data).output.audioMode,'source');
+ assert.deepEqual(graph['8'].inputs['ref_audios.ref_audio_0'],['60',0]);assert.deepEqual(graph['5'].inputs.audio_vae,['4',0]);assert.deepEqual(graph['6'].inputs.audio,['60',0]);assert.deepEqual(JSON.parse(graph['5'].inputs.timeline_data).output,{mode:'fixed',width:864,height:480,audioMode:'source'});
  assert.equal((await request('POST','/jobs/test/comfy')).status,502);assert.equal(prompts,0);
  assert.equal((await request('POST','/jobs/test/comfy')).status,202);assert.equal(prompts,1);
  assert.equal((await request('POST','/jobs/test/comfy')).status,200);assert.equal(uploads,2);assert.equal(prompts,1);
@@ -104,6 +104,7 @@ test('custom H3 dimensions survive acceptance and reach the actual graph',async(
   assert.equal((await request('POST','/jobs',{...job,width:736,height:1280})).status,202);
   const graph=(await request('GET','/jobs/test/graph')).data.prompt;
   assert.equal(graph['5'].inputs.width,736);assert.equal(graph['5'].inputs.height,1280);
+  assert.deepEqual(JSON.parse(graph['5'].inputs.timeline_data).output,{mode:'fixed',width:736,height:1280});
   assert.equal((await request('POST','/jobs',{...job,id:'bad',width:1920,height:1080})).status,400);
 });
 
