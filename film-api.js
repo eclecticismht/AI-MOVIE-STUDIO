@@ -361,4 +361,4 @@ function createFilmApi(){
     }catch(error){send(400,{error:error.message})}return true;
   };
 }
-module.exports={batchRetryPlan,createFilmApi,validatePlan,makeAss,publicRun,work,retryPlan,recomposePlan,pauseAtBoundary};
+module.exports={isBusy:()=>busy.size>0||auditing.size>0||[...runs.values()].some(r=>['pending','rendering','assembling'].includes(r.status)||r.rechecking||r.audit?.status==='running'),batchRetryPlan,createFilmApi,validatePlan,makeAss,publicRun,work,retryPlan,recomposePlan,pauseAtBoundary};

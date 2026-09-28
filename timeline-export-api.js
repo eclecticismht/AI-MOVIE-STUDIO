@@ -153,4 +153,4 @@ async function timelineExportApi(req,res,pathname){
     send(404,{error:'剪辑接口不存在'});
   }catch(e){if(!res.headersSent)send(400,{error:e.message});else res.destroy()}return true;
 }
-module.exports={sourceLocation,validate,work,timelineExportApi,audioFilter,listExports,outputSettings,outputResolutions,outputScaleFilter,intermediateFilter,requiredExportBytes,assertExportSpace,deliveryModes,encodingArgs};
+module.exports={isBusy:()=>running.size>0,sourceLocation,validate,work,timelineExportApi,audioFilter,listExports,outputSettings,outputResolutions,outputScaleFilter,intermediateFilter,requiredExportBytes,assertExportSpace,deliveryModes,encodingArgs};

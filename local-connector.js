@@ -134,10 +134,11 @@ async function readComfyStatus(job) {
   } else if(record.status?.completed) job.connectorStatus="ComfyUI 已结束，未找到视频输出";
   jobs.set(job.id,job);persistQueue();return job;
 }
+const lifecycle=require('./service-lifecycle').createLifecycle({role:'connector',busy:()=>[...(submitting.size?['正在提交生成任务']:[]),...(statusSyncs.size?['正在同步生成结果或修复画面']:[])]});
 // Continue opted-in post-processing even when the user leaves the queue page.
 if(typeof setInterval==='function'){
  let checkingFaces=false;
- setInterval(async()=>{if(checkingFaces)return;checkingFaces=true;try{for(const job of jobs.values())if(job.comfyPromptId&&!job.cancelledAt&&job.faceRefineMode&&job.faceRefineMode!=='off'&&!job.videoUrl&&!['error'].includes(job.comfyStatus)){try{await syncComfyStatus(job)}catch{}}}finally{checkingFaces=false}},5000).unref();
+ setInterval(async()=>{if(checkingFaces||lifecycle.draining())return;checkingFaces=true;try{for(const job of jobs.values())if(job.comfyPromptId&&!job.cancelledAt&&job.faceRefineMode&&job.faceRefineMode!=='off'&&!job.videoUrl&&!['error'].includes(job.comfyStatus)){try{await syncComfyStatus(job)}catch{}}}finally{checkingFaces=false}},5000).unref();
 }
 
 function send(response, status, data) {
@@ -146,7 +147,7 @@ function send(response, status, data) {
 }
 function body(request) { return new Promise((resolve, reject) => { const chunks=[];let size=0,failed=false;request.on('error',reject);request.on("data", value => {if(failed)return;const chunk=Buffer.isBuffer(value)?value:Buffer.from(value);size+=chunk.length;if(size>12000000){failed=true;reject(Error("H3 请求过大"));return}chunks.push(chunk)}); request.on("end", () => {if(failed)return;try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || "{}")); } catch (error) { reject(error); } }); }); }
 
-http.createServer(async (request, response) => {
+const server=http.createServer(lifecycle.wrap(async (request, response) => {
   const denied=require('./local-request').requestError(request,{port,origins:['http://127.0.0.1:4173']});
   if(denied)return send(response,403,{ok:false,error:denied});
   if (request.method === "OPTIONS") return send(response, 204, {});
@@ -171,4 +172,6 @@ http.createServer(async (request, response) => {
     catch(error) { return send(response, 400, {ok:false,error:error.message.startsWith("H3 ")?error.message:"Invalid JSON job payload."}); }
   }
   send(response, 404, {ok:false,error:"Unknown connector route."});
-}).listen(port, "127.0.0.1", () => console.log(`Local Connector: http://127.0.0.1:${port}`));
+},{port,origins:['http://127.0.0.1:4173']})).listen(port, "127.0.0.1", () => console.log(`Local Connector: http://127.0.0.1:${port}`));
+
+lifecycle.attach(server);

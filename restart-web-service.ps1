@@ -116,6 +116,18 @@ if ($MyInvocation.InvocationName -ne '.') {
             if ($IncludeConnector) { Get-StudioConnectorProcess | Select-Object ProcessId, CreationDate; Assert-StudioRenderingIdle }
             [pscustomobject]@{ pid = $existing.ProcessId; startedAt = $existing.CreationDate; deliveryModes = @(Get-StudioDeliveryModes); changesMade = $false } | ConvertTo-Json -Depth 4
         } else {
+            # Once installed, the page and desktop button share the same graceful path.
+            $managed = $null
+            if ($IncludeConnector) {
+                try { $managed = Invoke-RestMethod "$studioUrl/api/studio-control" -TimeoutSec 5 } catch { }
+            }
+            if ($managed.service.version -eq 1 -and $managed.service.role -eq 'web') {
+                Get-StudioWebProcess | Out-Null
+                $request = Invoke-RestMethod "$studioUrl/api/studio-control" -Method Post -ContentType 'application/json' -Body '{"action":"restart"}' -TimeoutSec 10
+                $request | ConvertTo-Json -Depth 6
+                Show-StudioRestartMessage "已登记安全重启。若有制作任务，将在任务结束后自动执行。`n`n可在网页上查看进度或取消等待；无需再次点击重启。H3不会被重启。"
+                exit 0
+            }
             $mutex = New-Object System.Threading.Mutex($false, 'Local\AI_MOVIE_STUDIO_WebRestart_4173')
             $held = $mutex.WaitOne(0)
             if (-not $held) { throw '网页服务正在重启，请等待前一次操作完成。' }

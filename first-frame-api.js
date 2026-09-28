@@ -36,7 +36,7 @@ function createFirstFrameApi({root=__dirname,fetchImpl=fetch,pollMs=2500}={}){
   async function pump(){if(busy)return;busy=true;try{for(const j of jobs.values())if(['queued','running'].includes(j.status))await run(j)}finally{busy=false}}
   // A persisted prompt id is polled after restart; it is never blindly resubmitted.
   setImmediate(pump);
-  return async(req,res,url)=>{
+  const api=async(req,res,url)=>{
     if(!url.startsWith('/api/first-frames'))return false;
     const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data));return true};
     try{
@@ -52,5 +52,7 @@ function createFirstFrameApi({root=__dirname,fetchImpl=fetch,pollMs=2500}={}){
       const id=url.split('/').at(-1);if(req.method==='GET'&&jobs.has(id))return send(200,jobs.get(id));return send(404,{error:'首帧任务不存在'});
     }catch(e){return send(400,{error:e.message})}
   };
+  api.isBusy=()=>busy||[...jobs.values()].some(j=>['queued','running'].includes(j.status));
+  return api;
 }
 module.exports={createFirstFrameApi};

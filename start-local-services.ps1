@@ -16,9 +16,11 @@ foreach ($service in @(
     @{ Name = 'connector'; Script = 'local-connector.js'; Url = 'http://127.0.0.1:8080/health'; Marker = 'AI MOVIE STUDIO Local Connector' }
 )) {
     if (Test-StudioService $service.Url $service.Marker) { continue }
+    $servicePort = ([Uri]$service.Url).Port
+    if (Get-NetTCPConnection -State Listen -LocalPort $servicePort -ErrorAction SilentlyContinue) { throw "端口 $servicePort 已占用但服务未就绪，没有重复启动。" }
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss-ffff'
     $log = Join-Path $runtime "$($service.Name)-$stamp"
-    $process = Start-Process -FilePath $node -ArgumentList $service.Script -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -RedirectStandardOutput "$log.stdout.log" -RedirectStandardError "$log.stderr.log" -PassThru
+    $process = Start-Process -FilePath $node -ArgumentList ('"' + (Join-Path $PSScriptRoot $service.Script) + '"') -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -RedirectStandardOutput "$log.stdout.log" -RedirectStandardError "$log.stderr.log" -PassThru
     $ready = $false
     for ($attempt = 0; $attempt -lt 20; $attempt++) {
         if (Test-StudioService $service.Url $service.Marker) { $ready = $true; break }

@@ -78,7 +78,7 @@ async function render(plan,selections,dir){
 }
 const FilmReview=require('./film-review');
 function signatureFor(plan,selections){return hash([plan,selections.map(({source:s})=>[s.shot.videoUrl||s.id,s.shot.audioMode,s.shot.audioAsset,s.shot.cropBottomPercent,s.shot.subtitle,s.shot.dialogueEvents,s.shot.screenCards,s.shot.subtitleTiming])])}
-function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=true,currentData=()=>require('./workspace-api').createStore().read().data}={}){
+function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=true,canRun=()=>true,currentData=()=>require('./workspace-api').createStore().read().data}={}){
  const states=new Map();let ticking=false;
  function save(s){fs.mkdirSync(root,{recursive:true});const file=path.join(root,s.id+'.json');fs.writeFileSync(file+'.tmp',JSON.stringify(s,null,2));fs.renameSync(file+'.tmp',file)}
  if(fs.existsSync(root))for(const name of fs.readdirSync(root).filter(n=>/^act_[a-f0-9]{32}\.json$/.test(n))){try{const s=JSON.parse(fs.readFileSync(path.join(root,name),'utf8'));if(s.status==='assembling')s.status='waiting';states.set(s.id,s)}catch{}}
@@ -94,7 +94,7 @@ function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=t
  }
  function list(projectId,scopeKey){return [...states.values()].filter(s=>s.enabled&&s.plan.projectId===projectId&&(!scopeKey||s.plan.scopeKey===scopeKey)).map(publicState)}
  async function tick(){
-  if(ticking)return;ticking=true;
+  if(ticking||!canRun())return;ticking=true;
   try{const all=await sources();for(const state of states.values()){
    if(!state.enabled)continue;const plan=structuredClone(state.plan),selected=choose(plan,all);state.missing=selected.missing;
    if(selected.missing.length){state.status='waiting';const active=selected.selections.find(x=>!x.source?.ready&&x.source?.status==='rendering');state.message=selected.stale.length?`${selected.stale.length} 个镜头的分镜或资产已更新，旧视频保留；请生成当前版本后审片`:active?`镜头正在制作${Number.isFinite(active.source.progress?.percent)?' · '+active.source.progress.percent+'%':''}，完成后自动合成本场`:`等待 ${selected.missing.length} 个镜头，齐全后自动合成`;save(state);continue}
@@ -121,11 +121,11 @@ function createService({root=ROOT,sources=loadSources,assemble=render,autoTick=t
  function file(id,version){const s=states.get(id);if(!s?.versions.some(v=>v.id===version))throw Error('成片版本不存在');return path.join(root,id,version,'movie.mp4')}
  function setTitle(id,value){const s=states.get(id);if(!s?.enabled)throw Error('场次不存在');const card=titleCard(value);if(card)s.plan.titleCard=card;else delete s.plan.titleCard;s.failedSignature=null;s.status='waiting';s.message='片名设置已保存，镜头齐全后自动更新成片';save(s);if(autoTick)void tick().catch(()=>{});return publicState(s)}
  function note(id,input){const s=states.get(id),v=s?.versions.find(v=>v.id===input.versionId);if(!v)throw Error('成片版本不存在');const seconds=Number(input.seconds);if(!Number.isFinite(seconds)||seconds<0||seconds>v.duration||typeof input.text!=='string'||!input.text.trim()||input.text.length>2000)throw Error('请填写有效的时间和审片意见');const notes=v.notes||[];if(notes.length>=200)throw Error('本版审片意见已达上限');v.notes=[...notes,{id:crypto.randomUUID(),seconds,text:input.text.trim(),createdAt:new Date().toISOString()}];try{save(s)}catch(e){v.notes=notes;throw e}return publicState(s)}
- return {sync,list,tick,approve,retry,file,setTitle,note};
+ return {sync,list,tick,approve,retry,file,setTitle,note,isBusy:()=>ticking};
 }
-function createActFilmApi(){
- const service=createService();const timer=setInterval(()=>service.tick().catch(()=>{}),5000);timer.unref();
- return async(req,res,pathname)=>{
+function createActFilmApi({canRun=()=>true}={}){
+ const service=createService({canRun});const timer=setInterval(()=>service.tick().catch(()=>{}),5000);timer.unref();
+ const api=async(req,res,pathname)=>{
   if(!pathname.startsWith('/api/act-films'))return false;
   const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data))};
   try{
@@ -141,5 +141,6 @@ function createActFilmApi(){
    }throw Error('请求方式无效');
   }catch(e){if(!res.headersSent)send(400,{error:e.message});else res.destroy()}return true;
  };
+ api.isBusy=service.isBusy;return api;
 }
 module.exports={titleCard,validate,loadSources,render,encodedDuration,createService,createActFilmApi};

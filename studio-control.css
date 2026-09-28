@@ -1,0 +1,8 @@
+#studioServiceControls{position:sticky;top:0;z-index:95;padding:12px 15px;margin:0 0 20px;border:1px solid #35404e;border-radius:10px;background:#101821;box-shadow:0 4px 16px #0004}
+.studio-service-buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#studioServiceControls .btn{min-width:66px;min-height:36px}
+#studioServiceControls .btn:disabled{opacity:.5;cursor:wait}
+#studioServiceControls [hidden]{display:none}
+#studioServiceMessage{font-size:12px;color:#b8c5d4;line-height:1.6;margin:8px 0 0;overflow-wrap:anywhere}
+#workspaceSaveStatus{position:static!important;margin-bottom:8px;border-radius:8px}
+@media(max-width:800px){#studioServiceControls{position:relative;margin-top:0}}
