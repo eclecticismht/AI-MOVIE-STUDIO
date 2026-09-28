@@ -30,14 +30,21 @@ function validate(binding,shot){
  if(digest(bytes)!==result.sha256||audio.bits!==24||audio.samples!==result.frames*2000)throw Error('H3 已绑定配音内容或长度改变，已停止提交，请重新核对声音');
  return result;
 }
-function prompt(base,refs,binding,events){
+function prompt(base,refs,binding,events,firstFrame){
  const sections=['subject_definitions','summary','retention_analysis','detailed_description','overall_soundscape','non_diegetic_music'];
  const referenced=require('./reference-assets').referencePrompt(base,refs),parts={};
  for(let i=0;i<sections.length;i++){const label=sections[i]+':',start=referenced.indexOf(label),end=i+1<sections.length?referenced.indexOf(sections[i+1]+':',start+label.length):-1;parts[sections[i]]=start<0?'':referenced.slice(start+label.length,end<0?undefined:end).trim()}
  if(!refs.length){parts.detailed_description=base.split('overall_soundscape:')[0].replace(/^integrated_multimodal_description:\s*/,'');parts.non_diegetic_music='N/A'}
- const voice=events.find(e=>e.type==='speech'),index=refs.findIndex(r=>r.assetId===voice.speakerId),speaker=index<0?voice.speakerName:`<Subject ${index+1}>`;
+ const voice=events.find(e=>e.type==='speech'),index=refs.findIndex(r=>r.assetId===voice.speakerId),speaker=firstFrame?(voice.delivery==='onscreen'?'<Subject 1>':voice.speakerName):index<0?voice.speakerName:`<Subject ${index+1}>`;
+ if(firstFrame){
+  const anchored=base.includes('integrated_multimodal_description:')?base:require('./first-frame').firstFramePrompt(base);
+  parts.subject_definitions='<Picture 1> is the exact first frame of [Shot 1], fixing composition, identities, clothes and the environment.'+(voice.delivery==='onscreen'?`\n<Subject 1> is ${voice.speakerName}, the person at the viewer’s ${firstFrame.speakerPosition} in <Picture 1>.`:'');
+  parts.summary='Continue the exact first frame with its existing people and spatial arrangement.';
+  parts.retention_analysis='<Picture 1> ([Shot 1] first frame): fully_preserved - the video starts from this image and preserves its identities, clothes and spatial arrangement.'+(voice.delivery==='onscreen'?'\n<Subject 1> (appears in [Shot 1]): fully_preserved - retain the established speaker and delivery.':'');
+  parts.detailed_description=anchored.split('integrated_multimodal_description:')[1].split('overall_soundscape:')[0].trim();
+ }
  parts.subject_definitions+='\n<Audio 1> is the approved, time-aligned spoken performance for '+speaker+' (S1).';
- parts.summary='[reference generation + audio reuse] Follow the referenced appearance and the approved timing of <Audio 1>. '+parts.summary;
+ parts.summary=(firstFrame?'[keyframe completion + audio reuse]':'[reference generation + audio reuse]')+' Follow the referenced appearance and the approved timing of <Audio 1>. '+parts.summary;
  parts.retention_analysis+='\n<Audio 1>: fully_copy - reuse this complete audio track, including pauses and breaths; no regeneration or time stretching.';
  parts.detailed_description+=`\n\n<Audio 1> controls the entire ${(binding.frames/24).toFixed(3)}-second timeline. ${voice.delivery==='onscreen'?speaker+' (S1) aligns visible speech articulation with the recorded syllables, stops and breaths.':'The speech stays off screen; visible characters must not mouth these words.'} Do not add words, singing, captions or subtitles. Keep reaction timing responsive without extending pauses.`;
  parts.overall_soundscape='Retain <Audio 1> as the exact final track. Additional ambience and effects will be mixed separately in post-production.';parts.non_diegetic_music='N/A';

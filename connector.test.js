@@ -65,6 +65,15 @@ test('historical execution graphs stay unchanged after the audio-lock upgrade',a
  assert.deepEqual((await request('GET','/jobs/test/graph')).data.prompt,executionGraph);
  assert.equal((await request('POST','/jobs/test/comfy')).data.job.comfyPromptId,'old-prompt');
 });
+test('first-frame performance sends exact image and locked source audio to Hybrid conditioning using FL2VA',async()=>{
+ const Contract=require('./performance-audio-contract'),events=[{type:'speech',speakerId:'xm',speakerName:'西门清',delivery:'onscreen',text:'没等。'}],binding={version:1,file:'ams-audio-'+'a'.repeat(64)+'.wav',sha256:'a'.repeat(64),duration:4,frames:90,speechKey:Contract.speechKey(events)};
+ const performanceAudio={...require('./performance-audio'),validate:Contract.validate,upload:async()=>binding},request=harness(async()=>reply({}),[],()=>{},performanceAudio),firstFrame={file:'ams-ref-'+'b'.repeat(64)+'.png',speakerPosition:'right'};
+ const result=await request('POST','/jobs',{...job,prompt:'detailed_description: [Shot 1] <Subject 1> answers briefly in <Subject 2>.',duration:4,h3Attention:'sage',firstFrame,performanceAudio:binding,dialogueEvents:events});assert.equal(result.status,202);
+ const graph=(await request('GET','/jobs/test/graph')).data.prompt,c=graph['61'].inputs;
+ assert.match(graph['1'].inputs.unet_name,/fl2va/);assert.equal(graph['20'].inputs.image,firstFrame.file);assert.equal(c.task_type,'Hybrid');assert.deepEqual(c.first_frame,['20',0]);assert.deepEqual(c.drive_audio,['60',0]);assert.equal(c.audio_mode,'lock_source');assert.equal(c.add_source_as_reference,true);assert.equal(c.audio_denoise_strength,0);assert.equal(c['ref_images.ref_image_0'],undefined);assert.equal(graph['8'],undefined);assert.deepEqual(graph['6'].inputs.audio,['60',0]);assert.equal(graph['62'].inputs.steps,25);
+ assert.match(c.prompt,/<Picture 1> is the exact first frame/);assert.match(c.prompt,/viewer’s right/);assert.doesNotMatch(c.prompt,/<Picture 2>|<Subject 2>/);assert.match(c.prompt,/<d>\[Chinese\]没等。<\/d>/);
+ assert.equal((await request('POST','/jobs',{...job,id:'ambiguous-first',duration:4,firstFrame:{file:firstFrame.file},performanceAudio:binding,dialogueEvents:events})).status,400);
+});
 test('project hold prevents new queue writes and submitting an older unsent job',async()=>{
  let upstream=0;const request=harness(async()=>{upstream++;throw Error('unexpected upstream')},[{...job,projectId:'held'}],projectId=>{assert.equal(projectId,'held');throw Error('H3 项目处于准备阶段')});
  const created=await request('POST','/jobs',{...job,id:'new',projectId:'held'});assert.equal(created.status,400);assert.match(created.data.error,/准备阶段/);

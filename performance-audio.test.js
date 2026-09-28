@@ -43,3 +43,15 @@ test('verified fast speech keeps exact Chinese words and six H3 reference sectio
  assert.match(text,/<Audio 1>: fully_copy/);assert.match(text,/<Subject 1> \(S1\) aligns visible/);assert.ok(text.includes('<d>[Chinese]'+event.text+'</d>'));
  assert.deepEqual(text.match(/^\w+:/gm),['subject_definitions:','summary:','retention_analysis:','detailed_description:','overall_soundscape:','non_diegetic_music:']);
 });
+test('approved audio accepts a validated first frame without changing samples, but rejects ambiguous speaker placement',()=>{
+ const h=harness();fixture(h);const b=h.api.prepare({file,duration:4,dialogueEvents:events}),frame={file:'ams-ref-'+'b'.repeat(64)+'.png',speakerPosition:'right'};
+ assert.equal(JSON.stringify(h.api.validate(b,{...shot,firstFrame:frame})),JSON.stringify(b));
+ assert.throws(()=>h.api.validate(b,{...shot,firstFrame:{file:frame.file}}),/说话人/);
+ assert.throws(()=>h.api.validate(b,{...shot,firstFrameUrl:'http://unbound/frame.png'}),/未绑定/);
+ const base=Dialogue.bindDialogue(require('./first-frame').firstFramePrompt('detailed_description: [Shot 1] A restrained reply.'),events,4,[],'right',true);
+ const text=h.api.prompt(base,[],b,events,frame);
+ assert.match(text,/<Picture 1> is the exact first frame/);assert.match(text,/keyframe completion \+ audio reuse/);assert.match(text,/viewer’s right/);assert.match(text,/<Subject 1> \(S1\) aligns visible/);assert.ok(text.includes('<d>[Chinese]'+event.text+'</d>'));
+ assert.doesNotMatch(text,/<Picture 2>|<Subject 2>/);assert.match(text,/<Audio 1>: fully_copy/);
+ const offEvents=[{...event,delivery:'offscreen'}],off=h.api.prepare({file,duration:4,dialogueEvents:offEvents}),offText=h.api.prompt('integrated_multimodal_description: [Shot 1] An empty chair.',[],off,offEvents,{file:frame.file});
+ assert.match(offText,/西门清 \(S1\)/);assert.match(offText,/speech stays off screen/);assert.doesNotMatch(offText,/<Subject 1>/);
+});

@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const Contract=require('./performance-audio-contract');
-function setup(){
- const shot={id:'s',projectId:'p',storyboardBatchId:'b',dur:4,dialogue:'西门清：今天换。',sourceExcerpt:'西门清：今天换。'},other={id:'other',projectId:'q'},D={activeProjectId:'p',projects:[{id:'p'},{id:'q'}],shots:[shot,other],characters:[{id:'xm',projectId:'p',name:'西门清'}],jobs:[],generations:[{id:'old',projectId:'p',shot:'s',videoUrl:'old.mp4'}]};
+function setup(shotFields={}){
+ const shot={id:'s',projectId:'p',storyboardBatchId:'b',dur:4,dialogue:'西门清：今天换。',sourceExcerpt:'西门清：今天换。',...shotFields},other={id:'other',projectId:'q'},D={activeProjectId:'p',projects:[{id:'p'},{id:'q'}],shots:[shot,other],characters:[{id:'xm',projectId:'p',name:'西门清'}],jobs:[],generations:[{id:'old',projectId:'p',shot:'s',videoUrl:'old.mp4'}]};
  let stored=JSON.stringify(D),release,message='';
  const context=vm.createContext({D,TL:{},editingShotId:null,PerformanceAudio:Contract,DialogueContract:require('./dialogue-contract'),FilmSourceSync:require('./film-source-sync'),AbortSignal,
   localStorage:{getItem:()=>stored,setItem:(k,v)=>stored=v},tlCurrent:()=>({shot:D.shots[0]}),tlInspector(){},tlRender(){},tlMessage:m=>message=m,window:{addEventListener(){}},document:{getElementById:()=>null},
@@ -13,6 +13,11 @@ function setup(){
 test('saving binds verified speech, invalidates current picture and preserves old versions and other projects',async()=>{
  const h=setup(),run=vm.runInContext("performanceAudioSave('s')",h.context);h.setStored(d=>d.projects[1].name='new other project name');h.release();assert.equal(await run,true,h.message());
  const data=h.stored();assert.equal(data.projects[1].name,'new other project name');assert.equal(data.shots[0].performanceAudio.duration,4);assert.equal(data.shots[0].status,'需重做');assert.equal(data.generations[0].videoUrl,'old.mp4');assert.equal(data.jobs.length,0);
+});
+test('editor can bind approved audio to its saved first-frame URL while keeping upload validation for submission',async()=>{
+ const h=setup({firstFrameUrl:'/assets/imported/first.png',firstFrameSpeakerPosition:'right'}),run=vm.runInContext("performanceAudioSave('s')",h.context);h.release();assert.equal(await run,true,h.message());
+ const shot=h.stored().shots[0];assert.equal(shot.firstFrameUrl,'/assets/imported/first.png');assert.equal(shot.firstFrameSpeakerPosition,'right');assert.equal(shot.performanceAudio.frames,90);assert.equal(shot.firstFrame,undefined);assert.equal(h.stored().jobs.length,0);
+ const missing=setup({firstFrameUrl:'/assets/imported/first.png'}),bad=vm.runInContext("performanceAudioSave('s')",missing.context);missing.release();assert.equal(await bad,false);assert.match(missing.message(),/说话人/);assert.equal(missing.stored().shots[0].performanceAudio,undefined);
 });
 for(const change of ['shot','project','draft','unsaved'])test('save rejects an in-flight '+change+' change without overwriting it',async()=>{
  const h=setup(),run=vm.runInContext("performanceAudioSave('s')",h.context);

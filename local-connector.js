@@ -72,11 +72,11 @@ function comfyGraph(job) { if(job.firstFrame&&(job.references||[]).some(r=>['ima
     graph['5'].inputs.model=['902',0];
   }
   if(performanceAudio){
-    const sample=graph['5'].inputs,approved=Performance.prompt(prompt,refs,performanceAudio,job.dialogueEvents);
-    const media=Object.fromEntries(Object.entries(graph['8'].inputs).filter(([key])=>key.startsWith('ref_images.')||key.startsWith('ref_videos.')));
+    const sample=graph['5'].inputs,approved=Performance.prompt(job.firstFrame?graph['5'].inputs.global_prompt:prompt,job.firstFrame?[]:refs,performanceAudio,job.dialogueEvents,job.firstFrame);
+    const media=job.firstFrame?{first_frame:['20',0]}:Object.fromEntries(Object.entries(graph['8'].inputs).filter(([key])=>key.startsWith('ref_images.')||key.startsWith('ref_videos.')));
     graph['60']={class_type:'LoadAudio',inputs:{audio:performanceAudio.file}};
     // Reference audio alone leaves target speech free to drift. Lock its latent during sampling.
-    graph['61']={class_type:'MiniMaxH3AudioConditioningT8',inputs:{clip:['2',0],video_vae:['3',0],audio_vae:['4',0],prompt:approved,...dimensions,length:frames,task_type:'Ref2VA',audio_mode:'lock_source',audio_denoise_strength:0,add_source_as_reference:true,prompt_primary_audio_ordinal:1,strict_prompt_tags:true,ref_image_size:'match',reference_video_policy:'official_2_to_15s',drive_audio:['60',0],...media}};
+    graph['61']={class_type:'MiniMaxH3AudioConditioningT8',inputs:{clip:['2',0],video_vae:['3',0],audio_vae:['4',0],prompt:approved,...dimensions,length:frames,task_type:job.firstFrame?'Hybrid':'Ref2VA',audio_mode:'lock_source',audio_denoise_strength:0,add_source_as_reference:true,prompt_primary_audio_ordinal:1,strict_prompt_tags:true,ref_image_size:'match',reference_video_policy:'official_2_to_15s',drive_audio:['60',0],...media}};
     graph['62']={class_type:'MiniMaxH3DualClockSamplerT8',inputs:{model:sample.model,av_latent:['61',1],steps:sample.steps,shift_video:sample.shift_video,shift_audio:sample.shift_audio,sampler_name:sample.sampler,scheduler:sample.scheduler}};
     graph['63']={class_type:'BasicGuider',inputs:{model:['62',0],conditioning:['61',0]}};
     graph['64']={class_type:'RandomNoise',inputs:{noise_seed:sample.seed}};
