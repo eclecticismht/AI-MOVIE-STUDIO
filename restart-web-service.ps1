@@ -28,6 +28,15 @@ function Get-StudioDeliveryModes {
     } catch { return @() }
 }
 
+function Assert-StudioPerformanceReady {
+    $performance = Invoke-RestMethod -Uri "$studioUrl/api/performance-audio" -TimeoutSec 5
+    # The web API checks compatibility with the running Connector; do not pin an old version here.
+    if ($performance.version -lt 1 -or -not $performance.connectorReady) {
+        throw '服务已启动，但配音生成链路尚未确认，请保留日志。'
+    }
+    return $performance
+}
+
 function Get-StudioWebProcess {
     $ownerId = Get-StudioWebListener
     if ($null -eq $ownerId) { return $null }
@@ -113,8 +122,7 @@ if ($MyInvocation.InvocationName -ne '.') {
             if ($IncludeConnector) { Restart-StudioConnectorService | ConvertTo-Json -Depth 4 }
             $result = Restart-StudioWebService
             if ($IncludeConnector) {
-                $performance = Invoke-RestMethod -Uri "$studioUrl/api/performance-audio" -TimeoutSec 5
-                if ($performance.version -ne 1 -or -not $performance.connectorReady) { throw '服务已启动，但配音生成链路尚未确认，请保留日志。' }
+                Assert-StudioPerformanceReady | Out-Null
             }
             $result | ConvertTo-Json -Depth 4
             if (-not $NoBrowser) {

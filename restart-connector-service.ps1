@@ -63,7 +63,7 @@ function Restart-StudioConnectorService {
         if ($started.HasExited) { throw "连接服务启动失败。日志：$logBase.stderr.log" }
         if ((Get-StudioConnectorListener) -eq $started.Id) {
             try { $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/health' -TimeoutSec 2 } catch { $health = $null }
-            if ($health.ok -and $health.performanceAudioVersion -eq 1) { return [pscustomobject]@{ ok = $true; oldPid = $previous.ProcessId; newPid = $started.Id; performanceAudioVersion = 1 } }
+            if ($health.ok -and $health.performanceAudioVersion -ge 1) { return [pscustomobject]@{ ok = $true; oldPid = $previous.ProcessId; newPid = $started.Id; performanceAudioVersion = $health.performanceAudioVersion } }
         }
         Start-Sleep -Milliseconds 300
     }

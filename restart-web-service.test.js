@@ -37,13 +37,13 @@ const windows={skip:process.platform!=='win32'};
 
 function connectorRun(change=''){
  return run(`
- $script:connectorOwner=22002; $script:queueBusy=$false; $script:filmBusy=$false; $script:ready=$true; $script:children=@([pscustomobject]@{Name='conhost.exe'})
+ $script:connectorOwner=22002; $script:queueBusy=$false; $script:filmBusy=$false; $script:ready=$true; $script:capability=2; $script:children=@([pscustomobject]@{Name='conhost.exe'})
  function Get-NetTCPConnection { if($script:connectorOwner){[pscustomobject]@{LocalPort=8080;OwningProcess=$script:connectorOwner}}; [pscustomobject]@{LocalPort=4173;OwningProcess=12001}; [pscustomobject]@{LocalPort=8188;OwningProcess=44004} }
  function Get-CimInstance { param($ClassName,$Filter); if($Filter -like 'ParentProcessId=*'){return $script:children}; [pscustomobject]@{ProcessId=$script:connectorOwner;Name=$script:processName;CommandLine='node local-connector.js';CreationDate=[datetime]'2026-01-01'} }
  function Invoke-RestMethod {param($Uri)
   if($Uri.EndsWith('/queue')){return [pscustomobject]@{queue_running=@(if($script:queueBusy){,@(0,'task')});queue_pending=@()}}
   if($Uri.EndsWith('/api/film')){return [pscustomobject]@{runs=@(if($script:filmBusy){[pscustomobject]@{status='rendering'}})}}
-  [pscustomobject]@{ok=$true;connector='AI MOVIE STUDIO Local Connector';performanceAudioVersion=if($script:ready){1}else{0}}
+  [pscustomobject]@{ok=$true;connector='AI MOVIE STUDIO Local Connector';performanceAudioVersion=if($script:ready){$script:capability}else{0}}
  }
  function Stop-Process { param($Id);$script:stopped+=@($Id);$script:connectorOwner=$null }
  function Start-Process { param($FilePath,$ArgumentList,$WorkingDirectory,$WindowStyle,$RedirectStandardOutput,$RedirectStandardError,[switch]$PassThru);$script:launched+=@([pscustomobject]@{argument=$ArgumentList;window=$WindowStyle});$script:connectorOwner=55005;[pscustomobject]@{Id=55005;HasExited=$false} }
@@ -52,7 +52,18 @@ function connectorRun(change=''){
  `);
 }
 test('Connector activation stops only its verified process and confirms audio capability',windows,()=>{
- const r=connectorRun();assert.equal(r.error,null);assert.deepEqual(r.stopped,[22002]);assert.equal(r.result.newPid,55005);assert.equal(r.launched[0].window,'Hidden');assert.equal(r.launched[0].argument,'"'+path.join(__dirname,'local-connector.js')+'"');
+ const r=connectorRun();assert.equal(r.error,null);assert.deepEqual(r.stopped,[22002]);assert.equal(r.result.newPid,55005);assert.equal(r.result.performanceAudioVersion,2);assert.equal(r.launched[0].window,'Hidden');assert.equal(r.launched[0].argument,'"'+path.join(__dirname,'local-connector.js')+'"');
+});
+
+test('restart reports the real Connector capability instead of rejecting later versions',windows,()=>{
+ const r=connectorRun('$script:capability=3');assert.equal(r.error,null);assert.equal(r.result.performanceAudioVersion,3);
+});
+
+test('combined restart trusts live compatibility and still rejects mismatched services',windows,()=>{
+ for(const [version,ready,passes] of [[2,'$true',true],[3,'$true',true],[2,'$false',false],[0,'$true',false]]){
+  const r=run(`function Invoke-RestMethod { [pscustomobject]@{version=${version};connectorReady=${ready}} }; $answer=Assert-StudioPerformanceReady`);
+  assert.equal(!r.error,passes);assert.deepEqual(r.stopped,[]);assert.deepEqual(r.launched,[]);
+ }
 });
 test('Connector activation refuses active GPU work, active films and foreign processes',windows,()=>{
  for(const change of ['$script:queueBusy=$true','$script:filmBusy=$true',"$script:processName='python.exe'","$script:children=@([pscustomobject]@{Name='ffmpeg.exe'})"]){const r=connectorRun(change);assert.ok(r.error);assert.deepEqual(r.stopped,[]);assert.deepEqual(r.launched,[])}
