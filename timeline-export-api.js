@@ -2,7 +2,18 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const Edit=require('./timeline-edit'),{resolveAudioAsset}=require('./audio-assets');
 const Subtitles=require('./timeline-subtitles');
 const ROOT=path.join(__dirname,'timeline-exports'),FFMPEG=process.env.FFMPEG_PATH||'C:\\AI\\Comfy UI\\ComfyUI\\.venv\\Lib\\site-packages\\imageio_ffmpeg\\binaries\\ffmpeg-win-x86_64-v7.1.exe';
+const OUTPUTS=Object.freeze({
+  '1280x720':Object.freeze({width:1280,height:720,label:'HD',upscaled:false}),
+  '1920x1080':Object.freeze({width:1920,height:1080,label:'Full HD',upscaled:true}),
+  '3840x2160':Object.freeze({width:3840,height:2160,label:'4K UHD（上采样）',upscaled:true})
+});
 const running=new Set();
+function outputSettings(value){
+  const preset=value||'1280x720',settings=OUTPUTS[preset];
+  if(!settings)throw Error('请选择支持的成片分辨率：1280x720、1920x1080 或 3840x2160');
+  return {preset,...settings};
+}
+function outputScaleFilter(value){const output=typeof value==='string'?outputSettings(value):value||outputSettings();return `scale=${output.width}:${output.height}:flags=lanczos,setsar=1,format=yuv420p`}
 function sourceLocation(value){
   const u=new URL(value,'http://127.0.0.1:4173');
   if(u.username||u.password||u.hash)throw Error('素材地址无效');
@@ -26,7 +37,7 @@ function validate(input){
   const edit={order:sources.map(s=>s.id),clips:Object.fromEntries(sources.map(s=>[s.id,s]))},clips=Edit.build(sources,edit),mix=Edit.mix(input.mix);
   if(mix.musicFile)resolveAudioAsset(mix.musicFile);
   if(clips.at(-1).end>1800)throw Error('单次剪辑导出最长 30 分钟');
-  return {projectId:input.projectId,title:String(input.title||'时间线剪辑版').slice(0,120),clips:clips.map(c=>({...c.shot,...c.edit,overlap:c.overlap,duration:c.duration})),mix};
+  return {projectId:input.projectId,title:String(input.title||'时间线剪辑版').slice(0,120),clips:clips.map(c=>({...c.shot,...c.edit,overlap:c.overlap,duration:c.duration})),mix,output:outputSettings(input.outputResolution)};
 }
 function command(args){return new Promise((resolve,reject)=>{const p=spawn(FFMPEG,args,{windowsHide:true,stdio:['ignore','ignore','pipe']});let log='';p.stderr.on('data',b=>log=(log+b).slice(-20000));p.on('error',reject);p.on('close',code=>code===0?resolve(log):reject(Object.assign(Error('合成失败：'+log.slice(-1200)),{log})))})}
 async function download(location,file){if(location.file){await fs.promises.copyFile(location.file,file);return}const r=await fetch(location.url,{redirect:'error',signal:AbortSignal.timeout(120000)});if(!r.ok)throw Error('视频无法读取：HTTP '+r.status);let size=0;await pipeline(Readable.fromWeb(r.body),new Transform({transform(chunk,encoding,cb){size+=chunk.length;cb(size>512*1024*1024?Error('单个素材超过512MB'):null,chunk)}}),fs.createWriteStream(file))}
@@ -40,7 +51,8 @@ function listExports(projectId,root=ROOT,io=fs){
     try{
       const run=JSON.parse(io.readFileSync(path.join(root,id,'run.json'),'utf8'));
       if(run.status!=='complete'||run.plan?.projectId!==projectId||!Number.isFinite(run.duration)||run.duration<=0||!io.existsSync(path.join(root,id,'movie.mp4')))continue;
-      exports.push({id,title:run.plan.title,duration:run.duration,clipCount:run.plan.clips.length,createdAt:run.createdAt,url:'/timeline-exports/'+id+'/movie.mp4'});
+      const output=run.plan.output||outputSettings();
+      exports.push({id,title:run.plan.title,duration:run.duration,clipCount:run.plan.clips.length,createdAt:run.createdAt,width:output.width||1280,height:output.height||720,resolutionLabel:output.label||'HD',upscaled:output.upscaled===true,url:'/timeline-exports/'+id+'/movie.mp4'});
     }catch{} // A damaged or incomplete export must not hide other completed films.
   }
   return exports.sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||''))||b.id.localeCompare(a.id));
@@ -72,7 +84,8 @@ async function work(run){
       const escaped=file.replace(/\\/g,'/').replace(/:/g,'\\:').replace(/'/g,"\\'");
       filters.push('['+video+"]ass='"+escaped+"'[captioned]");video='captioned';
     }
-    await command(['-y',...inputs,'-filter_complex_threads','1','-filter_complex',filters.join(';'),'-map','['+video+']','-map','[mixed]','-t',String(graph.duration),'-c:v','libx264','-preset','fast','-crf','20','-pix_fmt','yuv420p','-c:a','aac','-movflags','+faststart',path.join(dir,'movie.mp4')]);
+    const output=run.plan.output||outputSettings();filters.push(`[${video}]${outputScaleFilter(output)}[master]`);
+    await command(['-y',...inputs,'-filter_complex_threads','1','-filter_complex',filters.join(';'),'-map','[master]','-map','[mixed]','-t',String(graph.duration),'-c:v','libx264','-preset','fast','-crf','20','-pix_fmt','yuv420p','-c:a','aac','-movflags','+faststart',path.join(dir,'movie.mp4')]);
     run.status='complete';run.duration=graph.duration;run.url='/timeline-exports/'+run.id+'/movie.mp4';run.message='剪辑版已导出，请审阅转场、声音和对白完整性。';save(run);
   }catch(e){run.status='failed';run.message=e.message;save(run)}finally{running.delete(run.id)}
 }
@@ -98,4 +111,4 @@ async function timelineExportApi(req,res,pathname){
     send(404,{error:'剪辑接口不存在'});
   }catch(e){if(!res.headersSent)send(400,{error:e.message});else res.destroy()}return true;
 }
-module.exports={sourceLocation,validate,work,timelineExportApi,audioFilter,listExports};
+module.exports={sourceLocation,validate,work,timelineExportApi,audioFilter,listExports,outputSettings,outputScaleFilter};
