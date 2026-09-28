@@ -80,6 +80,19 @@ test('project hold prevents new queue writes and submitting an older unsent job'
  assert.equal((await request('GET','/jobs')).data.jobs.length,1);
  const submitted=await request('POST','/jobs/test/comfy',{});assert.equal(submitted.status,502);assert.match(submitted.data.error,/准备阶段/);assert.equal(upstream,0);
 });
+
+test('first-frame graph uses verified recording timing for fast onscreen and offscreen dialogue',async()=>{
+ const Contract=require('./performance-audio-contract'),text='还有一位，记得我今天得花钱。孩子的，得记着。';
+ for(const delivery of ['onscreen','offscreen']){
+  const events=[{type:'speech',speakerId:'xm',speakerName:'西门清',delivery,text}],duration=5,binding={version:1,file:'ams-audio-'+'a'.repeat(64)+'.wav',sha256:'a'.repeat(64),duration,frames:Contract.frames(duration),speechKey:Contract.speechKey(events)};
+  const performanceAudio={...require('./performance-audio'),validate:Contract.validate},request=harness(async()=>reply({}),[],()=>{},performanceAudio),firstFrame={file:'ams-ref-'+'b'.repeat(64)+'.png',...(delivery==='onscreen'?{speakerPosition:'right'}:{})};
+  const input={...job,id:delivery,duration,firstFrame,performanceAudio:binding,dialogueEvents:events};
+  assert.equal((await request('POST','/jobs',input)).status,202);
+  const result=await request('GET','/jobs/'+delivery+'/graph');assert.equal(result.status,200,JSON.stringify(result.data));
+  assert.equal(result.data.prompt['61'].inputs.length,binding.frames);assert.equal(result.data.prompt['60'].inputs.audio,binding.file);assert.ok(result.data.prompt['61'].inputs.prompt.includes(text));
+  const unbound=await request('POST','/jobs',{...input,id:delivery+'-unbound',performanceAudio:undefined});assert.equal(unbound.status,400);assert.equal((await request('GET','/jobs')).data.jobs.length,1);
+ }
+});
 test('lost persisted Comfy task becomes recoverable and a late output is found without resubmission',async()=>{
  let output=false,offline=false,posts=0;
  const request=harness(async(url,options={})=>{if(options.method==='POST')posts++;if(offline)throw Error('offline');return reply(url.endsWith('/queue')?{queue_running:[],queue_pending:[]}:output?{p1:{status:{completed:true,status_str:'success'},outputs:{save:{videos:[{filename:'late.mp4'}]}}}}:{})},[{...job,comfyPromptId:'p1',recovery:{status:'checking',since:Date.now()-40000,checks:1}}]);

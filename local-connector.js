@@ -52,7 +52,7 @@ function comfyGraph(job) { if(job.firstFrame&&(job.references||[]).some(r=>['ima
   "7":{class_type:"SaveVideo",inputs:{video:["6",0],filename_prefix:prefix,format:"auto",codec:"auto"}}
 };
   if(job.firstFrame){
-    const frame=validateFirstFrame(job.firstFrame),base=firstFramePrompt(job.prompt),anchored=job.dialogueEvents?DialogueContract.bindDialogue(base,job.dialogueEvents,job.duration,[],frame.speakerPosition):base;
+    const frame=validateFirstFrame(job.firstFrame),base=firstFramePrompt(job.prompt),anchored=job.dialogueEvents?DialogueContract.bindDialogue(base,job.dialogueEvents,job.duration,[],frame.speakerPosition,!!performanceAudio):base;
     graph['5'].inputs.task_type='i2v — 图生视频(Image to Video)';
     graph['5'].inputs.global_prompt=anchored;graph['5'].inputs.i2v_groups=['8',0];
     graph['8']={class_type:'MiniMaxH3DirectorGroupImageToVideo',inputs:{prompt:anchored,duration_sec:frames/24,first_frame:['20',0]}};
