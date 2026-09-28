@@ -1,4 +1,4 @@
-param([switch]$NoBrowser)
+﻿param([switch]$NoBrowser)
 $ErrorActionPreference = 'Stop'
 $node = (Get-Command node -ErrorAction Stop).Source
 $runtime = Join-Path $PSScriptRoot '.runtime'

@@ -1,6 +1,13 @@
 const test=require('node:test'),assert=require('node:assert/strict'),http=require('node:http'),crypto=require('node:crypto');
 const {createLifecycle}=require('./service-lifecycle'),{createControlApi}=require('./studio-control');
 const {runOperation,WEB,CONNECTOR,COMFY}=require('./service-control-worker');
+test('service entry scripts parse in Windows PowerShell 5 with Chinese paths and messages',{skip:process.platform!=='win32'},()=>{
+ const path=require('node:path'),{execFileSync}=require('node:child_process');
+ for(const name of ['start-local-services.ps1','start-renderer-service.ps1','restart-web-service.ps1']){
+  const file=path.join(__dirname,name).replaceAll("'","''"),source=`$errors=$null;$tokens=$null;[System.Management.Automation.Language.Parser]::ParseFile('${file}',[ref]$tokens,[ref]$errors)|Out-Null;if($errors.Count){exit 1}`;
+  execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(source,'utf16le').toString('base64')],{windowsHide:true,timeout:10000});
+ }
+});
 async function serverFor(t,lifecycle,handler){
  const server=http.createServer(lifecycle.wrap(handler));lifecycle.attach(server);
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>{server.closeAllConnections();server.close()});

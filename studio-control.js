@@ -3,7 +3,12 @@ const ACTIVE=new Set(['queued','waiting','applying','starting']);
 function createOperationStore(root=__dirname){
  const dir=path.join(root,'.runtime','service-control'),file=path.join(dir,'operation.json');
  const read=()=>fs.existsSync(file)?JSON.parse(fs.readFileSync(file,'utf8')):null;
- function write(value){fs.mkdirSync(dir,{recursive:true});const temp=file+'.'+process.pid+'.tmp';fs.writeFileSync(temp,JSON.stringify(value,null,2));fs.renameSync(temp,file);return value}
+ function write(value){
+  if(!/^[a-f0-9-]{36}$/.test(value.id))throw Error('操作编号无效');
+  fs.mkdirSync(dir,{recursive:true});const text=JSON.stringify(value,null,2);
+  // Retain completed and failed operations when a later button press becomes current.
+  for(const target of [path.join(dir,value.id+'.json'),file]){const temp=target+'.'+process.pid+'.tmp';fs.writeFileSync(temp,text);fs.renameSync(temp,target)}return value;
+ }
  const cancelFile=id=>{if(!/^[a-f0-9-]{36}$/.test(id))throw Error('操作编号无效');return path.join(dir,id+'.cancel')};
  return {dir,read,write,cancel:id=>fs.writeFileSync(cancelFile(id),'cancel'),cancelled:id=>fs.existsSync(cancelFile(id))};
 }

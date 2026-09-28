@@ -8,7 +8,7 @@ async function request(base,route,body){
 }
 function runScript(name){return new Promise((resolve,reject)=>{
  const child=spawn('powershell.exe',['-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',path.join(__dirname,name),'-NoBrowser'],{cwd:__dirname,windowsHide:true,stdio:['ignore','ignore','pipe']});let error='';
- child.stderr.on('data',data=>error=(error+data).slice(-3000));child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(Error(error||'服务启动失败')));
+ child.stderr.on('data',data=>error=(error+data).slice(-3000));child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(Object.assign(Error('本地服务未能启动，请查看服务操作记录中的错误详情。'),{detail:error})));
 })}
 async function runOperation(op,{record,cancelled=()=>false,req=request,pause=sleep,start=()=>runScript('start-local-services.ps1'),startRenderer=()=>runScript('start-renderer-service.ps1'),currentBuild=buildId,now=Date.now}={}){
  const endpoints=[CONNECTOR,WEB],lease=op.id,deadline=now()+12*60*60*1000;
@@ -66,7 +66,7 @@ async function runOperation(op,{record,cancelled=()=>false,req=request,pause=sle
   if(draining)await release();
   // If only one service closed, restore availability without touching GPU jobs.
   if(stopped)try{await start()}catch{}
-  update(error.cancelled?'cancelled':'failed',error.message);
+  update(error.cancelled?'cancelled':'failed',error.message,error.detail?{errorDetails:error.detail}:{});
  }
 }
 async function main(id){
