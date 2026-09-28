@@ -1,8 +1,9 @@
-﻿param([switch]$CheckOnly, [switch]$NoBrowser, [switch]$NoDialog)
+﻿param([switch]$CheckOnly, [switch]$NoBrowser, [switch]$NoDialog, [switch]$IncludeConnector)
 
 $ErrorActionPreference = 'Stop'
 $studioRoot = $PSScriptRoot
 $studioUrl = 'http://127.0.0.1:4173'
+. (Join-Path $studioRoot 'restart-connector-service.ps1')
 
 function Get-StudioWebListener {
     $owners = @(Get-NetTCPConnection -State Listen -ErrorAction Stop |
@@ -103,17 +104,24 @@ if ($MyInvocation.InvocationName -ne '.') {
     try {
         if ($CheckOnly) {
             $existing = Get-StudioWebProcess
+            if ($IncludeConnector) { Get-StudioConnectorProcess | Select-Object ProcessId, CreationDate; Assert-StudioRenderingIdle }
             [pscustomobject]@{ pid = $existing.ProcessId; startedAt = $existing.CreationDate; deliveryModes = @(Get-StudioDeliveryModes); changesMade = $false } | ConvertTo-Json -Depth 4
         } else {
             $mutex = New-Object System.Threading.Mutex($false, 'Local\AI_MOVIE_STUDIO_WebRestart_4173')
             $held = $mutex.WaitOne(0)
             if (-not $held) { throw '网页服务正在重启，请等待前一次操作完成。' }
+            if ($IncludeConnector) { Restart-StudioConnectorService | ConvertTo-Json -Depth 4 }
             $result = Restart-StudioWebService
+            if ($IncludeConnector) {
+                $performance = Invoke-RestMethod -Uri "$studioUrl/api/performance-audio" -TimeoutSec 5
+                if ($performance.version -ne 1 -or -not $performance.connectorReady) { throw '服务已启动，但配音生成链路尚未确认，请保留日志。' }
+            }
             $result | ConvertTo-Json -Depth 4
             if (-not $NoBrowser) {
                 try { Start-Process $studioUrl } catch { } # Browser failure must not turn a successful restart into a failed restart.
             }
-            Show-StudioRestartMessage "网页服务已重启，新版双文件导出已启用。`n`nH3和Connector未重启。原页面如有未保存的编辑，请先保存再刷新。"
+            if ($IncludeConnector) { Show-StudioRestartMessage "网页与连接服务已重启，配音生成链路已启用。`n`nH3未重启，没有自动提交生成任务。原页面如有未保存编辑，请先保存再刷新。" }
+            else { Show-StudioRestartMessage "网页服务已重启，新版双文件导出已启用。`n`nH3和Connector未重启。原页面如有未保存的编辑，请先保存再刷新。" }
         }
     } catch {
         Show-StudioRestartMessage $_.Exception.Message -Failed

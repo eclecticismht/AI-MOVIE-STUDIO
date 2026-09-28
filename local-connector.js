@@ -1,5 +1,6 @@
 const {validateFirstFrame,firstFramePrompt}=require('./first-frame');
 const DialogueContract=require('./dialogue-contract');
+const Performance=require('./performance-audio');
 // AI MOVIE STUDIO Local Connector. Runs only on 127.0.0.1:8080.
 // It accepts H3 jobs from the web cockpit and keeps them local until a real H3 worker is configured.
 const http = require("http");
@@ -41,7 +42,7 @@ function attentionMode(value) {
   return mode;
 }
 function h3FrameCount(seconds) { return Math.max(5, 17 * Math.round((Math.max(4, Math.min(15, Number(seconds) || 5)) * 24 - 5) / 17) + 5); }
-function comfyGraph(job) { if(job.firstFrame&&(job.references||[]).some(r=>['images','videos'].includes(r.kind)))throw Error('上传参考素材不能与独立首帧同时使用'); const frames=h3FrameCount(job.duration), prompt=job.dialogueEvents?DialogueContract.bindDialogue(job.prompt,job.dialogueEvents,job.duration,job.references||[]):job.prompt, prefix="AI_MOVIE_STUDIO/"+job.id,dimensions=renderDimensions(job),refs=validateReferences(job.references); const graph= {
+function comfyGraph(job) { if(job.firstFrame&&(job.references||[]).some(r=>['images','videos'].includes(r.kind)))throw Error('上传参考素材不能与独立首帧同时使用'); const performanceAudio=Performance.validate(job.performanceAudio,job),frames=h3FrameCount(job.duration), prompt=job.dialogueEvents?DialogueContract.bindDialogue(job.prompt,job.dialogueEvents,job.duration,job.references||[],undefined,!!performanceAudio):job.prompt, prefix="AI_MOVIE_STUDIO/"+job.id,dimensions=renderDimensions(job),refs=validateReferences(job.references); const graph= {
   "1":{class_type:"UNETLoader",inputs:{unet_name:"Minimax_H3\\minimax_h3_fl2va_pruned_int8_convrot.safetensors",weight_dtype:"default"}},
   "2":{class_type:"CLIPLoader",inputs:{clip_name:"qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",type:"minimax",device:"default"}},
   "3":{class_type:"VAELoader",inputs:{vae_name:"minimax_h3_video_vae_fp16.safetensors"}},
@@ -56,7 +57,7 @@ function comfyGraph(job) { if(job.firstFrame&&(job.references||[]).some(r=>['ima
     graph['5'].inputs.global_prompt=anchored;graph['5'].inputs.i2v_groups=['8',0];
     graph['8']={class_type:'MiniMaxH3DirectorGroupImageToVideo',inputs:{prompt:anchored,duration_sec:frames/24,first_frame:['20',0]}};
     graph['20']={class_type:'LoadImage',inputs:{image:frame.file}};
-  }else if(refs.length){
+  }else if(refs.length||performanceAudio){
     graph['1'].inputs.unet_name='Minimax_H3\\minimax_h3_ref2va_pruned_int8_convrot.safetensors';
     graph['5'].inputs.task_type='r2v — 参考主体生视频(Reference to Video)';
     graph['5'].inputs.global_prompt=referencePrompt(prompt,refs);
@@ -64,6 +65,15 @@ function comfyGraph(job) { if(job.firstFrame&&(job.references||[]).some(r=>['ima
     graph['8']={class_type:'MiniMaxH3DirectorGroupReferenceToVideo',inputs:{prompt:referencePrompt(prompt,refs),duration_sec:frames/24}};
     refs.filter(r=>r.kind!=='videos').forEach((r,i)=>{const id=String(20+i);graph[id]={class_type:'LoadImage',inputs:{image:r.file}};graph['8'].inputs['ref_images.ref_image_'+i]=[id,0]});
     refs.filter(r=>r.kind==='videos').forEach((r,i)=>{const id=String(40+i*2),parts=String(41+i*2);graph[id]={class_type:'LoadVideo',inputs:{file:r.file}};graph[parts]={class_type:'GetVideoComponents',inputs:{video:[id,0]}};graph['8'].inputs['ref_videos.ref_video_'+i]=[parts,0]});
+  }
+  if(performanceAudio){
+    const approved=Performance.prompt(prompt,refs,performanceAudio,job.dialogueEvents);
+    graph['5'].inputs.global_prompt=approved;graph['8'].inputs.prompt=approved;
+    graph['5'].inputs.timeline_data=JSON.stringify({output:{audioMode:'source'}});
+    graph['60']={class_type:'LoadAudio',inputs:{audio:performanceAudio.file}};
+    graph['8'].inputs['ref_audios.ref_audio_0']=['60',0];
+    // The same waveform conditions generation and supplies the final soundtrack.
+    graph['6'].inputs.audio=['60',0];
   }
   if(attentionMode(job.h3Attention)==='sage'){
     graph['901']={class_type:'PathchSageAttentionKJ',inputs:{model:['1',0],sage_attention:'auto',allow_compile:false}};
@@ -80,6 +90,7 @@ async function comfyRequest(route, options={}) {
 }
 async function submitToComfy(job) {
   require('./production-policy').assertGenerationAllowed(job.projectId);
+  if(job.performanceAudio&&!job.submissionPending&&!job.comfyPromptId)await Performance.upload(job.performanceAudio,job,comfyUrl,fetch);
   return require('./connector-submission').submit(job,{request:comfyRequest,persist:persistQueue,graph:comfyGraph});
 }
 const statusSyncs=new Map();
@@ -138,7 +149,7 @@ http.createServer(async (request, response) => {
     const state=await require('./renderer-readiness').rendererReadiness(comfyUrl);
     return send(response,state.ok?200:503,state);
   }
-  if (request.method === "GET" && request.url === "/health") {let queue=null;try{queue=await comfyRequest("/queue")}catch{}return send(response,200,{ok:true,connector:"AI MOVIE STUDIO Local Connector",node:{name:"NODE_01"},h3WorkerConfigured:true,rendererOnline:!!queue,running:queue?.queue_running?.length??null,queued:queue?.queue_pending?.length??null,historyCount:jobs.size});}
+  if (request.method === "GET" && request.url === "/health") {let queue=null;try{queue=await comfyRequest("/queue")}catch{}return send(response,200,{ok:true,connector:"AI MOVIE STUDIO Local Connector",node:{name:"NODE_01"},h3WorkerConfigured:true,performanceAudioVersion:1,rendererOnline:!!queue,running:queue?.queue_running?.length??null,queued:queue?.queue_pending?.length??null,historyCount:jobs.size});}
   if (request.method === "GET" && request.url === "/jobs") return send(response, 200, {jobs:[...jobs.values()]});
   if(request.method==='POST'&&request.url==='/reference-videos'){try{const data=await body(request);return send(response,201,await require('./prompt-video').uploadVideo(data.file,comfyUrl))}catch(error){return send(response,400,{error:error.message})}}
   if(request.method==='POST'&&request.url==='/references') {try{const data=await body(request);return send(response,201,await uploadReference(data.dataUrl,comfyUrl))}catch(error){return send(response,400,{error:error.message})}}
@@ -151,7 +162,7 @@ http.createServer(async (request, response) => {
   const comfyMatch=request.url.match(/^\/jobs\/([^/]+)\/comfy$/);
   if (request.method === "POST" && comfyMatch) { const job=jobs.get(decodeURIComponent(comfyMatch[1])); if(!job) return send(response,404,{ok:false,error:"Unknown connector job."}); if(job.cancelledAt)return send(response,409,{ok:false,error:"已取消的任务不能重新提交，请创建新任务。"}); if(job.comfyPromptId)return send(response,200,{ok:true,job}); if(submitting.has(job.id))return send(response,409,{ok:false,error:"任务正在提交，请稍后同步状态。"}); submitting.add(job.id); try { const result=await submitToComfy(job); job.connectorStatus="已提交 ComfyUI H3"; job.comfyPromptId=result.prompt_id; job.comfyNumber=result.number; job.submittedAt=new Date().toISOString(); jobs.set(job.id,job); persistQueue(); return send(response,202,{ok:true,job}); } catch(error) { job.connectorStatus=(job.submissionPending?"提交结果待确认：":"ComfyUI 提交失败：")+error.message; jobs.set(job.id,job);persistQueue();return send(response,502,{ok:false,error:error.message,job}); } finally { submitting.delete(job.id); } }
   if (request.method === "POST" && request.url === "/jobs") {
-    try { const job = await body(request); if (!job || typeof job.id!=="string" || !job.id.trim() || typeof job.prompt!=="string" || !job.prompt.trim()) return send(response, 400, {ok:false,error:"Job id and H3 prompt are required."}); const prior=jobs.get(job.id); if(prior)return send(response,200,{ok:true,job:prior}); require('./production-policy').assertGenerationAllowed(job.projectId); const h3Attention=attentionMode(job.h3Attention),dimensions=renderDimensions(job),references=validateReferences(job.references),firstFrame=validateFirstFrame(job.firstFrame); if(job.mode==='I2VA'&&!firstFrame)throw Error('H3 首帧模式缺少图片'); const dialogueEvents=job.dialogueEvents?DialogueContract.validateEvents(job.dialogueEvents):undefined;if(firstFrame&&dialogueEvents?.some(e=>e.type==='speech'&&e.delivery==='onscreen')&&!firstFrame.speakerPosition)throw Error('H3 首帧镜头请指定画内发声者在画面中的位置');if(dialogueEvents)DialogueContract.bindDialogue(job.prompt,dialogueEvents,job.duration,references); if(job.mode==='Ref2VA'&&!references.length)throw Error('H3 参考图模式缺少图片'); if(job.sourceFingerprint!==undefined&&!/^[a-f0-9]{64}$/.test(job.sourceFingerprint))throw Error('H3 来源指纹无效'); const {id,prompt,shot,projectId,model,mode,duration,candidates,sourceFingerprint}=job,accepted={id,prompt,shot,projectId,model,mode,duration,candidates,sourceFingerprint,h3Attention,faceRefineMode:require('./face-refine').mode(job.faceRefineMode),references,...(firstFrame?{firstFrame}:{}),...(dialogueEvents?{dialogueEvents}:{}),...dimensions,mode:firstFrame?'I2VA':references.length?'Ref2VA':mode,connectorStatus:"已接收，等待 H3 Worker",receivedAt:prior?.receivedAt||new Date().toISOString(),retries:prior?.retries||0}; jobs.set(job.id, accepted); persistQueue(); return send(response, 202, {ok:true,job:accepted}); }
+    try { const job = await body(request); if (!job || typeof job.id!=="string" || !job.id.trim() || typeof job.prompt!=="string" || !job.prompt.trim()) return send(response, 400, {ok:false,error:"Job id and H3 prompt are required."}); const prior=jobs.get(job.id); if(prior)return send(response,200,{ok:true,job:prior}); require('./production-policy').assertGenerationAllowed(job.projectId); const h3Attention=attentionMode(job.h3Attention),dimensions=renderDimensions(job),references=validateReferences(job.references),firstFrame=validateFirstFrame(job.firstFrame); if(job.mode==='I2VA'&&!firstFrame)throw Error('H3 首帧模式缺少图片'); const dialogueEvents=job.dialogueEvents?DialogueContract.validateEvents(job.dialogueEvents):undefined;const performanceAudio=Performance.validate(job.performanceAudio,{...job,dialogueEvents});if(firstFrame&&dialogueEvents?.some(e=>e.type==='speech'&&e.delivery==='onscreen')&&!firstFrame.speakerPosition)throw Error('H3 首帧镜头请指定画内发声者在画面中的位置');if(dialogueEvents)DialogueContract.bindDialogue(job.prompt,dialogueEvents,job.duration,references,undefined,!!performanceAudio); if(job.mode==='Ref2VA'&&!references.length&&!performanceAudio)throw Error('H3 参考图模式缺少图片'); if(job.sourceFingerprint!==undefined&&!/^[a-f0-9]{64}$/.test(job.sourceFingerprint))throw Error('H3 来源指纹无效'); const {id,prompt,shot,projectId,model,mode,duration,candidates,sourceFingerprint}=job,accepted={id,prompt,shot,projectId,model,mode,duration,candidates,sourceFingerprint,h3Attention,faceRefineMode:require('./face-refine').mode(job.faceRefineMode),references,...(firstFrame?{firstFrame}:{}),...(dialogueEvents?{dialogueEvents}:{}),...(performanceAudio?{performanceAudio}:{}),...dimensions,mode:firstFrame?'I2VA':references.length||performanceAudio?'Ref2VA':mode,connectorStatus:"已接收，等待 H3 Worker",receivedAt:prior?.receivedAt||new Date().toISOString(),retries:prior?.retries||0}; jobs.set(job.id, accepted); persistQueue(); return send(response, 202, {ok:true,job:accepted}); }
     catch(error) { return send(response, 400, {ok:false,error:error.message.startsWith("H3 ")?error.message:"Invalid JSON job payload."}); }
   }
   send(response, 404, {ok:false,error:"Unknown connector route."});

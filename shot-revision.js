@@ -17,7 +17,8 @@ function parse(content,request){
  if(!Number.isFinite(r.dur)||r.dur<4||r.dur>15)throw Error('AI 返回的镜头时长超出 4–15 秒');
  if(!isStructured(r.prompt)||/<d\b/i.test(r.prompt))throw Error('AI 返回的 H3 提示词格式不完整');
  const events=Dialogue.parseDialogue(r.dialogue,request.characters);
- Dialogue.bindDialogue(r.prompt,events,r.dur);
+ let bound;try{bound=require('./performance-audio-contract').validate(request.shot.performanceAudio,{...request.shot,...r,dialogueEvents:events})}catch{}
+ Dialogue.bindDialogue(r.prompt,events,r.dur,[],undefined,!!bound);
  const audioMode=require('./shot-audio').validate(r.audioMode,events,request.shot.audioAsset);
  const ids=['characterIds','sceneIds','propIds'].flatMap(k=>request.shot[k]||[]);
  const states=Assets.validate(r.assetStates||{},ids);

@@ -11,10 +11,11 @@ test('reference videos reach H3 as frame batches with distinct image and video l
  assert.equal(graph['40'].class_type,'LoadVideo');assert.equal(graph['41'].class_type,'GetVideoComponents');assert.deepEqual(graph['8'].inputs['ref_videos.ref_video_0'],['41',0]);assert.deepEqual(graph['8'].inputs['ref_images.ref_image_0'],['20',0]);assert.match(graph['5'].inputs.global_prompt,/<Video 1>/);assert.match(graph['5'].inputs.global_prompt,/<Picture 1>/);assert.equal(graph['8'].inputs['ref_video_audios.ref_video_audio_0'],undefined);
 });
 
-function harness(fetchImpl,seed=[],policyCheck=()=>{}) {
+function harness(fetchImpl,seed=[],policyCheck=()=>{},performanceAudio) {
   let handler, saved=JSON.stringify(seed);
   const context=vm.createContext({
     require(name) {
+      if(name==='./performance-audio'&&performanceAudio)return performanceAudio;
       if(name==='./production-policy')return {assertGenerationAllowed:policyCheck};
       if(name==='http')return {createServer(fn){handler=fn;return {listen(){}}}};
       if(name==='fs')return {readFileSync(){return saved},writeFileSync(path,value){saved=value},renameSync(){}};
@@ -36,6 +37,19 @@ function harness(fetchImpl,seed=[],policyCheck=()=>{}) {
 }
 const reply=data=>({ok:true,json:async()=>data});
 const job={id:'test',prompt:'A city at dawn',duration:5};
+
+test('approved performance conditions H3 with the same source waveform in the generated video',async()=>{
+ const Contract=require('./performance-audio-contract'),events=[{type:'speech',speakerId:'xm',speakerName:'西门清',delivery:'onscreen',text:'今天换。'}],binding={version:1,file:'ams-audio-'+'a'.repeat(64)+'.wav',sha256:'a'.repeat(64),duration:4,frames:90,speechKey:Contract.speechKey(events)};let uploads=0,prompts=0;
+ const performanceAudio={...require('./performance-audio'),validate:Contract.validate,upload:async()=>{uploads++;if(uploads===1)throw Error('upload checksum failed')}};
+ const request=harness(async(url,options)=>{if(url.endsWith('/prompt')){prompts++;return reply({prompt_id:'p1'})}return reply({})},[],()=>{},performanceAudio);
+ assert.equal((await request('POST','/jobs',{...job,duration:4,performanceAudio:binding,dialogueEvents:events})).status,202);
+ const graph=(await request('GET','/jobs/test/graph')).data.prompt;
+ assert.match(graph['1'].inputs.unet_name,/ref2va/);assert.equal(graph['60'].class_type,'LoadAudio');assert.equal(graph['60'].inputs.audio,binding.file);
+ assert.deepEqual(graph['8'].inputs['ref_audios.ref_audio_0'],['60',0]);assert.deepEqual(graph['5'].inputs.audio_vae,['4',0]);assert.deepEqual(graph['6'].inputs.audio,['60',0]);assert.equal(JSON.parse(graph['5'].inputs.timeline_data).output.audioMode,'source');
+ assert.equal((await request('POST','/jobs/test/comfy')).status,502);assert.equal(prompts,0);
+ assert.equal((await request('POST','/jobs/test/comfy')).status,202);assert.equal(prompts,1);
+ assert.equal((await request('POST','/jobs/test/comfy')).status,200);assert.equal(uploads,2);assert.equal(prompts,1);
+});
 test('project hold prevents new queue writes and submitting an older unsent job',async()=>{
  let upstream=0;const request=harness(async()=>{upstream++;throw Error('unexpected upstream')},[{...job,projectId:'held'}],projectId=>{assert.equal(projectId,'held');throw Error('H3 项目处于准备阶段')});
  const created=await request('POST','/jobs',{...job,id:'new',projectId:'held'});assert.equal(created.status,400);assert.match(created.data.error,/准备阶段/);

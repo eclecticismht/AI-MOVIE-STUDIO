@@ -84,10 +84,17 @@ function cutAudioContext(){
 function cutAttachAudio(element){element.volume=1;const ctx=cutAudioContext(),source=ctx.createMediaElementSource(element),gain=ctx.createGain();source.connect(gain);gain.connect(CUT.master);return gain}
 function cutStop(){CUT.playing=false;cancelAnimationFrame(CUT.raf);for(const slot of CUT.slots){slot.video.pause();slot.audio?.pause()}CUT.music?.pause()}
 function cutClear(){cutStop();for(const slot of CUT.slots){slot.node?.disconnect();slot.audioNode?.disconnect()}CUT.slots=[];document.getElementById('tl-screen')?.replaceChildren();}
+function cutPerformanceAudio(shot){
+ const binding=shot.performanceAudio;if(!binding)return undefined;
+ PerformanceAudio.validate(binding,{...shot,dialogueEvents:shotDialogueEvents(shot)});
+ const media=tlMedia(shot);if(media?.performanceAudio?.sha256!==binding.sha256||media.performanceAudio.speechKey!==binding.speechKey)throw Error('所选视频未使用当前配音生成，请生成后选择对应版本；旧视频仍保留');
+ return binding;
+}
 function cutSetSlot(slot,c,time){
+ const binding=cutPerformanceAudio(c.shot),mode=binding?'voiceover':c.shot.audioMode,asset=binding?.file||c.shot.audioAsset;
   const g=tlMedia(c.shot),url=g?.videoUrl||c.shot.videoUrl;if(!url)throw Error('第 '+(tlClips().findIndex(x=>x.shot.id===c.shot.id)+1)+' 镜：'+TimelineModel.missingReason(D,c.shot));
   const proxy=cutProxy(url);
-  if(slot.id!==c.shot.id||slot.url!==url||slot.audioMode!==c.shot.audioMode||slot.audioAsset!==c.shot.audioAsset){slot.video.pause();slot.audio?.pause();slot.audioNode?.disconnect();slot.audio=null;slot.audioNode=null;slot.id=c.shot.id;slot.url=url;slot.audioMode=c.shot.audioMode;slot.audioAsset=c.shot.audioAsset;slot.video.src=proxy;
+  if(slot.id!==c.shot.id||slot.url!==url||slot.audioMode!==mode||slot.audioAsset!==asset){slot.video.pause();slot.audio?.pause();slot.audioNode?.disconnect();slot.audio=null;slot.audioNode=null;slot.id=c.shot.id;slot.url=url;slot.audioMode=mode;slot.audioAsset=asset;slot.video.src=proxy;
     slot.video.onerror=()=>{cutStop();tlMessage('视频读取失败，请检查连接。')};
     const batchKey=cutKey();slot.video.onloadedmetadata=()=>{
       slot.video.currentTime=Math.min(c.edit.trimIn+Math.max(0,TL.time-c.start),slot.video.duration-0.001);
@@ -97,12 +104,12 @@ function cutSetSlot(slot,c,time){
         if(cutSave(e=>{e.clips||={};e.clips[c.shot.id]={...e.clips[c.shot.id],sourceDuration:actual,trimOut:Math.min(latest.edit.trimOut,actual)}},false)){tlTracks();if(!TL.dirty&&!CUT.playing)tlInspector()}
       }
     };
-    if(['replacement','voiceover'].includes(c.shot.audioMode)&&c.shot.audioAsset){slot.audio=new Audio('/audio-assets/'+encodeURIComponent(c.shot.audioAsset));slot.audio.loop=c.shot.audioMode!=='voiceover';slot.audio.onerror=()=>{cutStop();tlMessage('独立声音读取失败，请重新导入声音素材。')};if(CUT.ctx)slot.audioNode=cutAttachAudio(slot.audio)}
+    if(['replacement','voiceover'].includes(mode)&&asset){slot.audio=new Audio('/audio-assets/'+encodeURIComponent(asset));slot.audio.loop=mode!=='voiceover';slot.audio.onerror=()=>{cutStop();tlMessage('独立声音读取失败，请重新导入声音素材。')};if(CUT.ctx)slot.audioNode=cutAttachAudio(slot.audio)}
   }
   slot.clip=c;slot.video.style.display='block';slot.video.style.opacity='1';slot.video.style.clipPath='none';
   const seek=c.edit.trimIn+Math.max(0,time-c.start);
   if(Number.isFinite(slot.video.duration)&&Math.abs(slot.video.currentTime-seek)>0.18)slot.video.currentTime=Math.min(seek,slot.video.duration-0.001);
-  if(slot.audio&&Number.isFinite(slot.audio.duration)){const t=c.shot.audioMode==='voiceover'?Math.min(slot.audio.duration,seek):(time-c.start)%slot.audio.duration;if(Math.abs(slot.audio.currentTime-t)>0.2)slot.audio.currentTime=Math.max(0,t)}
+  if(slot.audio&&Number.isFinite(slot.audio.duration)){const t=mode==='voiceover'?Math.min(slot.audio.duration,seek):(time-c.start)%slot.audio.duration;if(Math.abs(slot.audio.currentTime-t)>0.2)slot.audio.currentTime=Math.max(0,t)}
 }
 function cutUpdate(time){
   const clips=tlClips(),active=TimelineEdit.active(clips,Math.min(time,Math.max(0,(clips.at(-1)?.end||0)-0.001)));
@@ -116,7 +123,7 @@ function cutUpdate(time){
   cutApplyMix();
 }
 function cutApplyMix(){const mix=TimelineEdit.mix(cutSettings().mix),active=CUT.slots.filter(s=>s.clip),master=CUT.masterOverride??mix.master;if(CUT.master)CUT.master.gain.value=master;
-  for(const [i,slot] of active.entries()){const c=slot.clip,p=active.length===2?(TL.time-active[1].clip.start)/active[1].clip.overlap:0,envelope=active.length===2?(i===0?1-p:p):1,gain=(slot.gainOverride??c.edit.gain)*Math.max(0,Math.min(1,envelope)),videoGain=['mute','replacement','voiceover'].includes(c.shot.audioMode)?0:gain;if(slot.node)slot.node.gain.value=videoGain;else slot.video.volume=videoGain*master;if(slot.audioNode)slot.audioNode.gain.value=gain;else if(slot.audio)slot.audio.volume=gain*master}
+  for(const [i,slot] of active.entries()){const c=slot.clip,p=active.length===2?(TL.time-active[1].clip.start)/active[1].clip.overlap:0,envelope=active.length===2?(i===0?1-p:p):1,gain=(slot.gainOverride??c.edit.gain)*Math.max(0,Math.min(1,envelope)),videoGain=['mute','replacement','voiceover'].includes(slot.audioMode||c.shot.audioMode)?0:gain;if(slot.node)slot.node.gain.value=videoGain;else slot.video.volume=videoGain*master;if(slot.audioNode)slot.audioNode.gain.value=gain;else if(slot.audio)slot.audio.volume=gain*master}
   if(CUT.musicNode)CUT.musicNode.gain.value=CUT.musicVolumeOverride??mix.musicVolume;else if(CUT.music)CUT.music.volume=(CUT.musicVolumeOverride??mix.musicVolume)*master;
 }
 tlPreview=function(){const c=tlCurrent();if(!c)return;const key=cutKey();if(CUT.projectKey!==key){cutClear();CUT.projectKey=key}try{cutUpdate(TL.time);const v=tlMedia(c.shot);document.getElementById('tl-preview-label').textContent='剪辑预览 · '+(v?.version||'素材')+' · 实时混音'}catch(e){cutClear();const placeholder=document.createElement('div');placeholder.className='tl-placeholder';placeholder.textContent=e.message;document.getElementById('tl-screen').append(placeholder)}};
@@ -140,7 +147,7 @@ async function cutExport(){
     if(key!==cutKey()||JSON.stringify(cutSettings())!==baseline)throw Error('核对期间剪辑发生变化，请重新导出。');
     if(!cutSave(e=>{e.clips||={};clips.forEach((c,i)=>{const actual=durations[i];if(c.edit.trimIn>=actual-.1)throw Error('第 '+(i+1)+' 镜入点超过实际素材长度');e.clips[c.shot.id]={...e.clips[c.shot.id],sourceDuration:actual,trimOut:Math.min(c.edit.trimOut,actual)}})},false))return;
     clips=tlClips();tlTracks();
-    const plan={projectId:D.activeProjectId,title:activeProject().name+' · 剪辑版',outputResolution,deliveryMode:selectedDelivery,aspectMode:activeProject().timelineAspectMode||'pad',colorMode:activeProject().timelineColorMode||'preserve',mix:TimelineEdit.mix(cutSettings().mix),clips:clips.map((c,i)=>({shotId:c.shot.id,url:sources[i],...c.edit,versionId:tlMedia(c.shot)?.id,filmRunId:tlMedia(c.shot)?.filmRunId,audioMode:c.shot.audioMode||'model',audioAsset:c.shot.audioAsset}))};
+    const plan={projectId:D.activeProjectId,title:activeProject().name+' · 剪辑版',outputResolution,deliveryMode:selectedDelivery,aspectMode:activeProject().timelineAspectMode||'pad',colorMode:activeProject().timelineColorMode||'preserve',mix:TimelineEdit.mix(cutSettings().mix),clips:clips.map((c,i)=>({shotId:c.shot.id,url:sources[i],...c.edit,versionId:tlMedia(c.shot)?.id,filmRunId:tlMedia(c.shot)?.filmRunId,audioMode:c.shot.audioMode||'model',audioAsset:c.shot.audioAsset,performanceAudio:cutPerformanceAudio(c.shot),performanceDuration:Number(c.shot.dur),dialogueEvents:c.shot.performanceAudio?shotDialogueEvents(c.shot):undefined}))};
     const r=await fetch('/api/timeline-export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(plan)}),out=await r.json();if(!r.ok)throw Error(out.error);CUT.exportId=out.id;sessionStorage.setItem('timeline-export:'+D.activeProjectId,out.id);tlMessage('剪辑版正在导出，使用现有视频，无需重新生成。');cutPollExport();
   }catch(e){tlMessage(e.message)}finally{CUT.exportPreparing=false}
 }

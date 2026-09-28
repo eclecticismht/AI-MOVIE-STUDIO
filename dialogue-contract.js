@@ -65,7 +65,7 @@
     });
   }
   function eventText(e){return e.type==='screen'?'屏幕文字：'+e.text:e.type==='sound'?'环境音：'+e.text:e.speakerName+(e.delivery==='phone'?'（语音）':e.delivery==='offscreen'?'（画外）':'')+'：'+e.text}
-  function bindDialogue(prompt,events,duration,references=[],speakerPosition){
+  function bindDialogue(prompt,events,duration,references=[],speakerPosition,audioTiming=false){
     events=validateEvents(events);const speech=events.filter(e=>e.type==='speech');
     if(/<d\b/i.test(prompt))throw Error('画面提示词含未校验台词，请重新编写提示词；台词由对白栏统一绑定。');
     // Visual-only rewriting can accidentally veto the separately verified speech.
@@ -77,7 +77,7 @@
     // A short shot with several speakers is especially prone to speaker swaps.
     if(new Set(speech.map(e=>e.speakerId)).size>1)throw Error('同一镜头含多个说话人物，请按说话轮次拆镜；每镜可保留其他人物的无声反应。');
     const units=speech.reduce((n,e)=>n+Array.from(e.text.replace(/[\s，。！？、…,.!?]/g,'')).length,0);
-    if(units/4+0.8>duration)throw Error('台词过长，当前时长难以自然说完；请延长镜头或拆分台词。');
+    if(!audioTiming&&units/4+0.8>duration)throw Error('台词过长，当前时长难以自然说完；请延长镜头或拆分台词。');
     const extra=speech.length?speech.map(e=>{
       const i=references.findIndex(r=>r.assetId===e.speakerId),subject=speakerPosition&&e.delivery==='onscreen'?`the person on the viewer’s ${speakerPosition} (${e.speakerName})`:i>=0?`<Subject ${i+1}> (${e.speakerName})`:e.speakerName;
       return `${subject} (S1), ${e.delivery==='phone'?'heard ONLY through the phone loudspeaker, physically off-screen':e.delivery==='offscreen'?'off-screen voice only':'the sole visible speaking character'}, says exactly <d>[Chinese]${e.text}</d>. All other visible people keep their mouths closed. Do not change words, add speech, or move this voice to another character.`;

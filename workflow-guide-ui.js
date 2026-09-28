@@ -30,6 +30,7 @@ async function workflowPreflight(shots){
   const projectId=D.activeProjectId,baseline=snapshot();
   const errors=workflowShotIssues(shots).filter(i=>!i.warning);
   if(errors.length)throw Error('生成前检查未通过：\n'+errors.map(i=>'第 '+i.index+' 镜：'+i.message).join('\n'));
+  if(typeof performanceAudioPreflight==='function')await performanceAudioPreflight(shots);
   // Screen composites still use uploaded images; pure black sequences are local only.
   if(shots.some(s=>s.renderMode!=='black'))await checkRendererReady();
   if(typeof ensureStoryCoverage==='function')await ensureStoryCoverage(shots);

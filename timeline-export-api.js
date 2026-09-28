@@ -61,7 +61,7 @@ function sourceLocation(value){
 }
 function validate(input){
   if(!input||typeof input.projectId!=='string'||!Array.isArray(input.clips)||!input.clips.length||input.clips.length>100)throw Error('请选择 1–100 个有视频的镜头');
-  const ids=new Set(),sources=input.clips.map((c,i)=>{if(typeof c.shotId!=='string'||ids.has(c.shotId))throw Error('镜头编号无效或重复');ids.add(c.shotId);sourceLocation(c.url);if(c.audioMode&&!['model','mute','replacement','voiceover'].includes(c.audioMode))throw Error('声音模式无效');if(['replacement','voiceover'].includes(c.audioMode))resolveAudioAsset(c.audioAsset);return {...c,id:c.shotId,sequence:i+1,dur:c.sourceDuration}});
+  const ids=new Set(),sources=input.clips.map((c,i)=>{if(typeof c.shotId!=='string'||ids.has(c.shotId))throw Error('镜头编号无效或重复');ids.add(c.shotId);sourceLocation(c.url);if(c.performanceAudio){const binding=require('./performance-audio').validate(c.performanceAudio,{duration:c.performanceDuration,dialogueEvents:c.dialogueEvents,audioMode:c.audioMode});if(Math.abs(c.sourceDuration*24-binding.frames)>1)throw Error('画面与绑定配音长度不匹配，请核对所选视频版本');c={...c,audioMode:'voiceover',audioAsset:binding.file}}if(c.audioMode&&!['model','mute','replacement','voiceover'].includes(c.audioMode))throw Error('声音模式无效');if(['replacement','voiceover'].includes(c.audioMode))resolveAudioAsset(c.audioAsset);return {...c,id:c.shotId,sequence:i+1,dur:c.sourceDuration}});
   const edit={order:sources.map(s=>s.id),clips:Object.fromEntries(sources.map(s=>[s.id,s]))},clips=Edit.build(sources,edit),mix=Edit.mix(input.mix);
   if(mix.musicFile)resolveAudioAsset(mix.musicFile);
   if(clips.at(-1).end>1800)throw Error('单次剪辑导出最长 30 分钟');

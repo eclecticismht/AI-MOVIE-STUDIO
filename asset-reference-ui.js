@@ -5,7 +5,8 @@ function shotDialogueEvents(shot){
   const characters=(D.characters||[]).filter(c=>c.projectId===shot.projectId);
   const events=DialogueContract.parseDialogue(shot.dialogue||'',characters);
   DialogueContract.checkSource(events,shot.sourceExcerpt);
-  DialogueContract.bindDialogue('visual only',events,Number(shot.dur));
+  const binding=typeof PerformanceAudio==='undefined'?undefined:PerformanceAudio.validate(shot.performanceAudio,{...shot,dialogueEvents:events});
+  DialogueContract.bindDialogue('visual only',events,Number(shot.dur),[],undefined,!!binding);
   return events;
 }
 function auditProductionShots(shots){

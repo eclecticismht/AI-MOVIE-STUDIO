@@ -6,7 +6,7 @@
    if((data.deletedGenerationResults||[]).some(t=>t.projectId===run.projectId&&t.jobId===shot.jobId&&t.videoUrl===shot.videoUrl))continue;
    if(generations.some(g=>g.projectId===run.projectId&&g.jobId===shot.jobId&&g.videoUrl===shot.videoUrl))continue;
    let id='GEN_'+run.id+'_'+shot.jobId;while(generations.some(g=>g.id===id))id+='v';
-   generations.push({id,projectId:run.projectId,shot:shot.shotId,jobId:shot.jobId,filmRunId:run.id,sourceFingerprint:shot.sourceFingerprint,videoUrl:shot.videoUrl,version:'自动成片逐镜',status:'待审核',createdAt:run.createdAt});added++;
+   generations.push({id,projectId:run.projectId,shot:shot.shotId,jobId:shot.jobId,filmRunId:run.id,sourceFingerprint:shot.sourceFingerprint,performanceAudio:shot.performanceAudio,videoUrl:shot.videoUrl,version:'自动成片逐镜',status:'待审核',createdAt:run.createdAt});added++;
   }
   return {generations,added};
  }

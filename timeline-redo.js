@@ -28,7 +28,7 @@
   return {...shot,prompt,soundscape:prompt.split('overall_soundscape:')[1].split('non_diegetic_music:')[0].trim()};
  }
  function editRequest(shot,prompt,instruction,characters){
-  const fields=['script','visual','camera','scene','dialogue','dur','audioMode','audioAsset','assetStates','characterIds','sceneIds','propIds','continueFromShotId','renderMode'];
+  const fields=['script','visual','camera','scene','dialogue','dur','audioMode','audioAsset','performanceAudio','assetStates','characterIds','sceneIds','propIds','continueFromShotId','renderMode'];
   return {instruction,characters:characters.map(c=>({id:c.id,name:c.name})),shot:{...Object.fromEntries(fields.map(k=>[k,shot[k]])),prompt}};
  }
  const api={scope,request,revised,editRequest};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.TimelineRedo=api;

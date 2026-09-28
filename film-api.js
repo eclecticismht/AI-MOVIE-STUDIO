@@ -3,6 +3,7 @@ const {validateFirstFrame}=require('./first-frame');
 const {alignSubtitles,checkedSubtitleTiming}=require('./subtitle-timing');
 const ScreenCards=require('./screen-cards');
 const ShotAudio=require('./shot-audio');
+const Performance=require('./performance-audio');
 const FilmQuality=require('./film-quality');
 const PendingQuality=require('./film-pending-quality');
 const Framing=require('./film-framing');
@@ -33,7 +34,7 @@ function validatePlan(input){
     if(s.renderMode==='black'&&(['replacement','overlay','voiceover'].includes(s.audioMode)||s.firstFrame||(s.dialogueEvents||[]).length||(s.screenCards||[]).length||(s.references||[]).length||s.subtitle?.trim()))throw Error('纯黑静音镜头不能附带对白、文字卡或参考图');
     if(!Number.isFinite(s.duration)||s.duration<4||s.duration>15)throw Error('每镜时长必须在 4–15 秒之间。');
     if(![s.width,s.height].every(n=>Number.isInteger(n)&&n>=32&&n<=8192&&n%32===0))throw Error('生成宽高必须是 32 的整数倍。');
-    const dialogueEvents=s.dialogueEvents?DialogueContract.validateEvents(s.dialogueEvents):undefined;if(dialogueEvents)DialogueContract.bindDialogue(s.prompt,dialogueEvents,s.duration,s.references||[]);
+    const dialogueEvents=s.dialogueEvents?DialogueContract.validateEvents(s.dialogueEvents):undefined;const performanceAudio=Performance.validate(s.performanceAudio,{...s,dialogueEvents});if(dialogueEvents)DialogueContract.bindDialogue(s.prompt,dialogueEvents,s.duration,s.references||[],undefined,!!performanceAudio);
     const screen=ScreenShot.validateScreenShot({...s,dialogueEvents},validateReferences(s.references));
     if(s.firstFrame&&dialogueEvents?.some(e=>e.type==='speech'&&e.delivery==='onscreen')&&!s.firstFrame.speakerPosition)throw Error('首帧镜头请指定画内发声者位置，避免说话人物错位');
     if(s.continuitySpeakerPosition&&!['left','center','right'].includes(s.continuitySpeakerPosition))throw Error('尾帧发声者位置无效');
@@ -48,7 +49,7 @@ function validatePlan(input){
     if(s.audioMode==='voiceover'&&require('./audio-assets').duration(s.audioAsset)>(17*Math.round((s.duration*24-5)/17)+5)/24+0.04)throw Error('独立画外声长于镜头，请延长镜头或分段，避免截断播报');
     if(s.sourceFingerprint!==undefined&&!/^[a-f0-9]{64}$/.test(s.sourceFingerprint))throw Error('来源校验信息无效');
     if(s.h3Attention!==undefined&&!['pytorch','sage'].includes(s.h3Attention))throw Error('H3 注意力模式无效');
-    return {h3Attention:s.h3Attention||'pytorch',faceRefineMode:require('./face-refine').mode(s.faceRefineMode),cropBottomPercent:Framing.validateBottomCrop(s.cropBottomPercent),...(s.sourceFingerprint?{sourceFingerprint:s.sourceFingerprint}:{}),...(s.continueFromShotId?{continueFromShotId:s.continueFromShotId,continuitySpeakerPosition:s.continuitySpeakerPosition}:{}),firstFrame:validateFirstFrame(s.firstFrame),...(['replacement','overlay','voiceover'].includes(s.audioMode)?{audioAsset:(resolveAudioAsset(s.audioAsset),s.audioAsset)}:{}),audioMode:ShotAudio.validate(s.audioMode,dialogueEvents,s.audioAsset),...(s.renderMode==='black'?{renderMode:'black'}:{}),...(screen?{renderMode:'screen',...screen}:{}),screenCards:ScreenCards.validate(s.screenCards||[],s.sourceExcerpt),sourceExcerpt:typeof s.sourceExcerpt==='string'?s.sourceExcerpt.slice(0,30000):'',...(dialogueEvents?{dialogueEvents}:{}),references:validateReferences(s.references),shotId:s.shotId,sequence:index+1,prompt:s.prompt,duration:s.duration,width:s.width,height:s.height,subtitle:typeof s.subtitle==='string'?s.subtitle.slice(0,5000):''};
+    return {...(performanceAudio?{performanceAudio}:{}),h3Attention:s.h3Attention||'pytorch',faceRefineMode:require('./face-refine').mode(s.faceRefineMode),cropBottomPercent:Framing.validateBottomCrop(s.cropBottomPercent),...(s.sourceFingerprint?{sourceFingerprint:s.sourceFingerprint}:{}),...(s.continueFromShotId?{continueFromShotId:s.continueFromShotId,continuitySpeakerPosition:s.continuitySpeakerPosition}:{}),firstFrame:validateFirstFrame(s.firstFrame),...(['replacement','overlay','voiceover'].includes(s.audioMode)?{audioAsset:(resolveAudioAsset(s.audioAsset),s.audioAsset)}:{}),audioMode:ShotAudio.validate(s.audioMode,dialogueEvents,s.audioAsset),...(s.renderMode==='black'?{renderMode:'black'}:{}),...(screen?{renderMode:'screen',...screen}:{}),screenCards:ScreenCards.validate(s.screenCards||[],s.sourceExcerpt),sourceExcerpt:typeof s.sourceExcerpt==='string'?s.sourceExcerpt.slice(0,30000):'',...(dialogueEvents?{dialogueEvents}:{}),references:validateReferences(s.references),shotId:s.shotId,sequence:index+1,prompt:s.prompt,duration:s.duration,width:s.width,height:s.height,subtitle:typeof s.subtitle==='string'?s.subtitle.slice(0,5000):''};
   });
   return {projectId:input.projectId,title:input.title.slice(0,120),shots};
 }
@@ -116,7 +117,8 @@ async function work(run){
         if(shot.continuitySpeakerPosition)firstFrame.speakerPosition=shot.continuitySpeakerPosition;
         shot.continuityFrame={...firstFrame,fromShotId:previous.shotId,fromJobId:previous.jobId};save(run);
       }
-      const accepted=await connector('/jobs',{id:jobId,projectId:run.projectId,shot:shot.shotId,prompt:shot.prompt,h3Attention:shot.h3Attention,faceRefineMode:shot.faceRefineMode,firstFrame,references:shot.references,dialogueEvents:shot.audioMode==='voiceover'?[]:shot.dialogueEvents,sourceFingerprint:shot.sourceFingerprint,duration:shot.duration,width:shot.width,height:shot.height,model:'Minimax H3',candidates:1});
+      const accepted=await connector('/jobs',{id:jobId,projectId:run.projectId,shot:shot.shotId,prompt:shot.prompt,h3Attention:shot.h3Attention,faceRefineMode:shot.faceRefineMode,firstFrame,references:shot.references,performanceAudio:shot.performanceAudio,dialogueEvents:shot.audioMode==='voiceover'?[]:shot.dialogueEvents,sourceFingerprint:shot.sourceFingerprint,duration:shot.duration,width:shot.width,height:shot.height,model:'Minimax H3',candidates:1});
+      if(shot.performanceAudio&&accepted.job?.performanceAudio?.sha256!==shot.performanceAudio.sha256)throw Error('H3 连接服务未保留配音绑定，请更新并重启Connector；未提交生成');
       shot.jobId=jobId;save(run);
       if(!accepted.job?.comfyPromptId&&!accepted.job?.submissionPending)try{await connector('/jobs/'+jobId+'/comfy',{})}catch(error){
         // A lost POST response may already have started GPU work. Poll/reconcile
@@ -137,7 +139,7 @@ async function work(run){
       const response=await fetch(url,{signal:AbortSignal.timeout(120000)});if(!response.ok)throw Error('无法读取生成视频');
       fs.writeFileSync(path.join(dir,`source-${i}.mp4`),Buffer.from(await response.arrayBuffer()));
       run.current.stage='规范画面与声音';save(run);
-      await command(['-y','-i',path.join(dir,`source-${i}.mp4`),'-vf','scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1','-r','24','-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-ar','48000','-ac','2','-af','afade=t=in:d=0.06',path.join(dir,`clip-${i}.mp4`)],path.join(dir,`clip-${i}.log`));
+      await command(['-y','-i',path.join(dir,`source-${i}.mp4`),'-vf','scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1','-r','24','-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-ar','48000','-ac','2',...(shot.performanceAudio?[]:['-af','afade=t=in:d=0.06']),path.join(dir,`clip-${i}.mp4`)],path.join(dir,`clip-${i}.log`));
       shot.ready=true;shot.jobId=jobId;shot.videoUrl=job.videoUrl;save(run);
       if(!await checkReadyShot(run,i,dir))return;
     }
@@ -240,7 +242,7 @@ function recomposePlan(run,changes){
     if(change.cropBottomPercent!==undefined)shot.cropBottomPercent=Framing.validateBottomCrop(change.cropBottomPercent);
     const source=shot.sourceExcerpt||(shot.dialogueEvents||[]).filter(e=>e.type==='screen').map(e=>e.text).join('\n');
     if(change.screenCards!==undefined)shot.screenCards=ScreenCards.validate(change.screenCards,source);shot.sourceExcerpt=source;
-    if(change.audioMode!==undefined){if(shot.renderMode==='black'&&['replacement','overlay','voiceover'].includes(change.audioMode))throw Error('纯黑静音镜头不能添加环境音');const asset=change.audioAsset??shot.audioAsset;shot.audioMode=ShotAudio.validate(change.audioMode,shot.dialogueEvents,asset);if(['replacement','overlay','voiceover'].includes(shot.audioMode)){resolveAudioAsset(asset);shot.audioAsset=asset}if(shot.audioMode==='voiceover'&&require('./audio-assets').duration(asset)>(17*Math.round((shot.duration*24-5)/17)+5)/24+0.04)throw Error('画外声音轨长于当前镜头');delete shot.speechCheck;delete shot.subtitleTiming;};
+    if(change.audioMode!==undefined){if(shot.performanceAudio&&change.audioMode!=='model')throw Error('已绑定的配音不能通过仅更新声音被替换，请回分镜重新绑定并生成');if(shot.renderMode==='black'&&['replacement','overlay','voiceover'].includes(change.audioMode))throw Error('纯黑静音镜头不能添加环境音');const asset=change.audioAsset??shot.audioAsset;shot.audioMode=ShotAudio.validate(change.audioMode,shot.dialogueEvents,asset);if(['replacement','overlay','voiceover'].includes(shot.audioMode)){resolveAudioAsset(asset);shot.audioAsset=asset}if(shot.audioMode==='voiceover'&&require('./audio-assets').duration(asset)>(17*Math.round((shot.duration*24-5)/17)+5)/24+0.04)throw Error('画外声音轨长于当前镜头');delete shot.speechCheck;delete shot.subtitleTiming;};
   }
   return {id:'film_'+crypto.randomBytes(8).toString('hex'),projectId:run.projectId,title:run.title+(changes.some(c=>c.cropBottomPercent!==undefined)?' · 画面整理':changes.some(c=>c.audioMode!==undefined)?' · 声音更新':' · 文字更新'),parentRunId:run.id,deferQualityReview:!!run.deferQualityReview,qualityGate:!!run.qualityGate,alignSubtitles:true,asrModel:run.audit?.model==='medium'?'medium':run.asrModel||'small',compositionOnly:!partial,shots,status:'pending',createdAt:new Date().toISOString()};
 }
@@ -283,6 +285,7 @@ function createFilmApi(){
         const plan=validatePlan(JSON.parse(raw)),existing=[...runs.values()].find(r=>r.projectId===plan.projectId&&['rendering','assembling'].includes(r.status));
         if(existing){send(409,{error:'此项目已有制作任务，请先查看当前进度。',run:publicRun(existing)});return true}
         require('./production-policy').assertGenerationAllowed(plan.projectId);
+        if(plan.shots.some(s=>s.performanceAudio)&&(await connector('/health')).performanceAudioVersion!==1)throw Error('请重启本地 Connector 以启用配音参考；尚未创建生成任务');
         const run={...plan,deferQualityReview:true,qualityGate:true,alignSubtitles:true,id:'film_'+crypto.randomBytes(8).toString('hex'),status:'pending',createdAt:new Date().toISOString()};runs.set(run.id,run);save(run);void work(run);send(202,{run:publicRun(run)});return true;
       }
       const match=pathname.match(/^\/api\/film\/(film_[a-f0-9]{16})(?:\/(video|resume|pause|audit|retry|recompose|align|accept-review|recheck|recheck-pending|retry-batch|validate-revision|preview))?$/),run=match&&runs.get(match[1]);

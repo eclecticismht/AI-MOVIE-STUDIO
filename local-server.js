@@ -28,6 +28,7 @@ http.createServer(async (request, response) => {
   if(await require('./production-review-api').productionReviewApi(request,response,requestPath))return;
   if(await firstFrameApi(request,response,requestPath))return;
   if(await require('./audio-assets').audioAssetApi(request,response,requestPath))return;
+  if(await require('./performance-audio').api(request,response,requestPath))return;
   if (await screenplayApi(request, response, requestPath)) return;
   if (await filmApi(request,response,requestPath))return;
   let file;try{file=require('./static-path').resolveStatic(root,requestPath)}catch{response.writeHead(403);response.end('Forbidden');return}

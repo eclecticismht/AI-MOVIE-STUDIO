@@ -28,7 +28,7 @@ function nextShotVersion(shot){
   const highest=Math.max(0,...records.map(x=>Number(String(x.version||'v001').replace(/^v/,''))||1));
   return 'v'+String(highest+1).padStart(3,'0');
 }
-function createStoryboardJob(s){if(['black','screen'].includes(s.renderMode))throw Error('此镜头由自动成片在本地合成，无需加入模型队列。');const p=activeProject(),duration=Number(s.dur);if(!Number.isFinite(duration)||duration<4||duration>15)throw Error('请先为分镜设置 4–15 秒的有效时长。');return {dialogueEvents:shotDialogueEvents(s),id:uid('JOB'),shot:s.id,projectId:p.id,version:nextShotVersion(s),status:'等待本地 H3 Connector',model:'Minimax H3',mode:'T2VA',duration,...(typeof h3JobSettings==='function'?h3JobSettings():{}),prompt:compileH3Prompt(s),candidates:p.wizard?.candidates||3,createdAt:new Date().toLocaleString(),queuedAt:new Date().toISOString()}}
+function createStoryboardJob(s){if(['black','screen'].includes(s.renderMode))throw Error('此镜头由自动成片在本地合成，无需加入模型队列。');const p=activeProject(),duration=Number(s.dur);if(!Number.isFinite(duration)||duration<4||duration>15)throw Error('请先为分镜设置 4–15 秒的有效时长。');return {performanceAudio:s.performanceAudio,dialogueEvents:shotDialogueEvents(s),id:uid('JOB'),shot:s.id,projectId:p.id,version:nextShotVersion(s),status:'等待本地 H3 Connector',model:'Minimax H3',mode:'T2VA',duration,...(typeof h3JobSettings==='function'?h3JobSettings():{}),prompt:compileH3Prompt(s),candidates:p.wizard?.candidates||3,createdAt:new Date().toLocaleString(),queuedAt:new Date().toISOString()}}
 const referenceQueueLocks=new Set();
 async function queueById(id,button){
   const shot=D.shots.find(s=>s.id===id&&s.projectId===D.activeProjectId);if(!shot)return;
