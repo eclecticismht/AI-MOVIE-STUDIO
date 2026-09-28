@@ -4,6 +4,11 @@ const {validatePlan}=require('./film-api');
 const ref={assetId:'chen',kind:'characters',name:'Chen Shi',file:'ams-ref-'+'a'.repeat(64)+'.png'};
 test('visual prompt uses shot-specific wardrobe instead of biographical wardrobe',()=>{const r={...ref,notes:'成年工地工人戴手套\nState for this shot only: 高中少年穿校服'};const p=referencePrompt('校园门口',[r]);assert.ok(p.includes('高中少年穿校服'));assert.ok(!p.includes('成年工地工人戴手套'));assert.ok(r.notes.includes('成年'));});
 test('character biography does not invent unreferenced worn props',()=>{const p=referencePrompt('公交上坐着',[{...ref,notes:'工地戴手套，妹妹读高三'}]);assert.ok(!p.includes('工地戴手套'));assert.ok(p.includes('supplied portrait'));});
+test('plain wardrobe does not inherit garment features from unrelated projects',()=>{
+ const p=referencePrompt('detailed_description: A man answers briefly.',[{...ref,notes:'State for this shot only: plain gray crew-neck T-shirt.'}]);
+ assert.match(p,/plain gray crew-neck T-shirt/);assert.match(p,/garment details actually visible/);
+ assert.doesNotMatch(p,/stripe count|zipper design/);
+});
 test('film plan preserves reference snapshots for the renderer',()=>{
   const plan=validatePlan({projectId:'p',title:'t',shots:[{shotId:'s',prompt:'a shot',duration:9,width:864,height:480,references:[ref]}]});
   assert.equal(plan.shots[0].references[0].file,ref.file);
