@@ -4,6 +4,10 @@ For regular use, start START_LOCAL_SERVER.bat and open http://127.0.0.1:4173. Fu
 The launcher starts the web server and connector in hidden background processes,
 reuses healthy running services, and opens the site. Closing the launcher does not
 stop them. After restarting Windows, run the launcher again. ComfyUI is separate.
+To restart only the web service after a code update, use the desktop shortcut
+"重启 AI MOVIE STUDIO", or run restart-web-service.ps1. It verifies the owner of
+port 4173, leaves Connector and ComfyUI running, and checks the new backend before
+reporting success. Save browser edits first. -CheckOnly performs a read-only check.
 Startup errors are saved under .runtime. For checks without opening a browser use
 powershell -NoProfile -File start-local-services.ps1 -NoBrowser.
 
