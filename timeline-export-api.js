@@ -13,6 +13,7 @@ function outputSettings(value){
   if(!settings)throw Error('请选择支持的成片分辨率：1280x720、1920x1080 或 3840x2160');
   return {preset,...settings};
 }
+function outputResolutions(){return Object.keys(OUTPUTS)}
 function outputScaleFilter(value){const output=typeof value==='string'?outputSettings(value):value||outputSettings();return `scale=${output.width}:${output.height}:flags=lanczos,setsar=1,format=yuv420p`}
 function sourceLocation(value){
   const u=new URL(value,'http://127.0.0.1:4173');
@@ -91,11 +92,11 @@ async function work(run){
 }
 async function timelineExportApi(req,res,pathname){
   if(!pathname.startsWith('/api/timeline-'))return false;
-  const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(data))};
+  const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data))};
   try{
     if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)throw Error('请从本地工作室操作');
     if(pathname==='/api/timeline-export'&&req.method==='GET'){
-      send(200,{exports:listExports(new URL(req.url,'http://localhost').searchParams.get('projectId'))});return true;
+      send(200,{exports:listExports(new URL(req.url,'http://localhost').searchParams.get('projectId')),outputResolutions:outputResolutions()});return true;
     }
     if(pathname==='/api/timeline-media'&&req.method==='GET'){
       const source=sourceLocation(new URL(req.url,'http://localhost').searchParams.get('url'));if(source.file){require('./media-response').sendFile(req,res,source.file)}else{
@@ -111,4 +112,4 @@ async function timelineExportApi(req,res,pathname){
     send(404,{error:'剪辑接口不存在'});
   }catch(e){if(!res.headersSent)send(400,{error:e.message});else res.destroy()}return true;
 }
-module.exports={sourceLocation,validate,work,timelineExportApi,audioFilter,listExports,outputSettings,outputScaleFilter};
+module.exports={sourceLocation,validate,work,timelineExportApi,audioFilter,listExports,outputSettings,outputResolutions,outputScaleFilter};

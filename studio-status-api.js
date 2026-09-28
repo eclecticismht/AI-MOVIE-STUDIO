@@ -8,7 +8,7 @@ async function diagnostics(fetchImpl=fetch){
  for(const name of ['MiniMaxH3Director','MiniMaxH3DirectorGroupImageToVideo','CreateVideo','SaveVideo'])if(!info?.[name])missing.push(name);
  for(const [node,key,model] of [['UNETLoader','unet_name','Minimax_H3/minimax_h3_fl2va_pruned_int8_convrot.safetensors'],['CLIPLoader','clip_name','qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors'],['VAELoader','vae_name','minimax_h3_video_vae_fp16.safetensors'],['VAELoader','vae_name','minimax_h3_audio_vae_fp32.safetensors']])if(!info?.[node]?.input?.required?.[key]?.[0]?.some?.(n=>n.replace(/\\/g,'/')===model))missing.push(model);
  const ffmpeg=fs.existsSync(FFMPEG),renderer=!!stats?.devices?.length;
- return {ready:renderer&&!missing.length&&ffmpeg,renderer,ffmpeg,missing,gpu:stats?.devices?.[0]?.name||null,running:queue?.queue_running?.length??null,queued:queue?.queue_pending?.length??null,nodeVersion:process.version,output:{width:1280,height:720,fps:24}};
+ return {ready:renderer&&!missing.length&&ffmpeg,renderer,ffmpeg,missing,gpu:stats?.devices?.[0]?.name||null,running:queue?.queue_running?.length??null,queued:queue?.queue_pending?.length??null,nodeVersion:process.version,output:{width:1280,height:720,fps:24},timelineOutputResolutions:require('./timeline-export-api').outputResolutions()};
 }
 let cached=null,expiry=0,inflight;
 async function studioStatusApi(req,res,url){
