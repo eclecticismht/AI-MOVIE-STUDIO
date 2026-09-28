@@ -285,7 +285,7 @@ function createFilmApi(){
         const plan=validatePlan(JSON.parse(raw)),existing=[...runs.values()].find(r=>r.projectId===plan.projectId&&['rendering','assembling'].includes(r.status));
         if(existing){send(409,{error:'此项目已有制作任务，请先查看当前进度。',run:publicRun(existing)});return true}
         require('./production-policy').assertGenerationAllowed(plan.projectId);
-        if(plan.shots.some(s=>s.performanceAudio)&&(await connector('/health')).performanceAudioVersion!==1)throw Error('请重启本地 Connector 以启用配音参考；尚未创建生成任务');
+        if(plan.shots.some(s=>s.performanceAudio)&&(await connector('/health')).performanceAudioVersion!==2)throw Error('请重启本地 Connector 以启用配音口型修正；尚未创建生成任务');
         const run={...plan,deferQualityReview:true,qualityGate:true,alignSubtitles:true,id:'film_'+crypto.randomBytes(8).toString('hex'),status:'pending',createdAt:new Date().toISOString()};runs.set(run.id,run);save(run);void work(run);send(202,{run:publicRun(run)});return true;
       }
       const match=pathname.match(/^\/api\/film\/(film_[a-f0-9]{16})(?:\/(video|resume|pause|audit|retry|recompose|align|accept-review|recheck|recheck-pending|retry-batch|validate-revision|preview))?$/),run=match&&runs.get(match[1]);

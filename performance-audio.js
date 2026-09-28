@@ -56,7 +56,7 @@ async function api(req,res,pathname){
  if(pathname!=='/api/performance-audio')return false;
  const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data))};
  try{
-  if(req.method==='GET'){let connected=false;try{const r=await fetch('http://127.0.0.1:8080/health',{signal:AbortSignal.timeout(3000)});connected=r.ok&&(await r.json()).performanceAudioVersion===1}catch{}send(200,{version:1,connectorReady:connected});return true}
+  if(req.method==='GET'){let connected=false;try{const r=await fetch('http://127.0.0.1:8080/health',{signal:AbortSignal.timeout(3000)});connected=r.ok&&(await r.json()).performanceAudioVersion===2}catch{}send(200,{version:2,connectorReady:connected});return true}
   if(req.method!=='POST')throw Error('请使用配音参考编辑器');
   if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)throw Error('请从本地工作室保存配音');
   const input=JSON.parse(await require('./request-body').readUtf8(req,30000,'配音绑定请求过大'));send(201,{binding:prepare(input)});

@@ -23,6 +23,13 @@ test('unsaved recording choice and old Connector block preflight with no queue m
  const h=setup();await assert.rejects(vm.runInContext('performanceAudioPreflight(D.shots)',h.context),/未保存/);
  vm.runInContext('performanceAudioDrafts.clear();D.shots[0].performanceAudio={version:1}',h.context);await assert.rejects(vm.runInContext('performanceAudioPreflight(D.shots)',h.context),/重启/);assert.equal(h.stored().jobs.length,0);
 });
+test('preflight rejects the reference-only service even when connected and accepts the locked route',async()=>{
+ const h=setup();vm.runInContext('performanceAudioDrafts.clear();D.shots[0].performanceAudio={version:1}',h.context);
+ h.context.fetch=async()=>({ok:true,json:async()=>({version:1,connectorReady:true})});
+ await assert.rejects(vm.runInContext('performanceAudioPreflight(D.shots)',h.context),/口型修正/);
+ h.context.fetch=async()=>({ok:true,json:async()=>({version:2,connectorReady:true})});
+ await vm.runInContext('performanceAudioPreflight(D.shots)',h.context);assert.equal(h.stored().jobs.length,0);
+});
 test('removing an invalid old binding needs no renderer and keeps original recordings and versions',async()=>{
  const h=setup();h.context.fetch=()=>{throw Error('must not fetch')};assert.equal(await vm.runInContext("performanceAudioSave('s',true)",h.context),true);assert.equal(h.stored().shots[0].performanceAudio,undefined);assert.equal(h.stored().generations.length,1);
 });

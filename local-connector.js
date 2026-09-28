@@ -66,19 +66,24 @@ function comfyGraph(job) { if(job.firstFrame&&(job.references||[]).some(r=>['ima
     refs.filter(r=>r.kind!=='videos').forEach((r,i)=>{const id=String(20+i);graph[id]={class_type:'LoadImage',inputs:{image:r.file}};graph['8'].inputs['ref_images.ref_image_'+i]=[id,0]});
     refs.filter(r=>r.kind==='videos').forEach((r,i)=>{const id=String(40+i*2),parts=String(41+i*2);graph[id]={class_type:'LoadVideo',inputs:{file:r.file}};graph[parts]={class_type:'GetVideoComponents',inputs:{video:[id,0]}};graph['8'].inputs['ref_videos.ref_video_'+i]=[parts,0]});
   }
-  if(performanceAudio){
-    const approved=Performance.prompt(prompt,refs,performanceAudio,job.dialogueEvents);
-    graph['5'].inputs.global_prompt=approved;graph['8'].inputs.prompt=approved;
-    graph['5'].inputs.timeline_data=JSON.stringify({output:{mode:'fixed',...dimensions,audioMode:'source'}});
-    graph['60']={class_type:'LoadAudio',inputs:{audio:performanceAudio.file}};
-    graph['8'].inputs['ref_audios.ref_audio_0']=['60',0];
-    // The same waveform conditions generation and supplies the final soundtrack.
-    graph['6'].inputs.audio=['60',0];
-  }
   if(attentionMode(job.h3Attention)==='sage'){
     graph['901']={class_type:'PathchSageAttentionKJ',inputs:{model:['1',0],sage_attention:'auto',allow_compile:false}};
     graph['902']={class_type:'MiniMaxH3MemoryEfficientSageAttentionPatch',inputs:{model:['901',0]}};
     graph['5'].inputs.model=['902',0];
+  }
+  if(performanceAudio){
+    const sample=graph['5'].inputs,approved=Performance.prompt(prompt,refs,performanceAudio,job.dialogueEvents);
+    const media=Object.fromEntries(Object.entries(graph['8'].inputs).filter(([key])=>key.startsWith('ref_images.')||key.startsWith('ref_videos.')));
+    graph['60']={class_type:'LoadAudio',inputs:{audio:performanceAudio.file}};
+    // Reference audio alone leaves target speech free to drift. Lock its latent during sampling.
+    graph['61']={class_type:'MiniMaxH3AudioConditioningT8',inputs:{clip:['2',0],video_vae:['3',0],audio_vae:['4',0],prompt:approved,...dimensions,length:frames,task_type:'Ref2VA',audio_mode:'lock_source',audio_denoise_strength:0,add_source_as_reference:true,prompt_primary_audio_ordinal:1,strict_prompt_tags:true,ref_image_size:'match',reference_video_policy:'official_2_to_15s',drive_audio:['60',0],...media}};
+    graph['62']={class_type:'MiniMaxH3DualClockSamplerT8',inputs:{model:sample.model,av_latent:['61',1],steps:sample.steps,shift_video:sample.shift_video,shift_audio:sample.shift_audio,sampler_name:sample.sampler,scheduler:sample.scheduler}};
+    graph['63']={class_type:'BasicGuider',inputs:{model:['62',0],conditioning:['61',0]}};
+    graph['64']={class_type:'RandomNoise',inputs:{noise_seed:sample.seed}};
+    graph['65']={class_type:'SamplerCustomAdvanced',inputs:{noise:['64',0],guider:['63',0],sampler:['62',1],sigmas:['62',2],latent_image:['61',1]}};
+    graph['66']={class_type:'MiniMaxH3AVDecodeT8',inputs:{av_latent:['65',0],video_vae:['3',0],audio_vae:['4',0]}};
+    graph['6'].inputs={...graph['6'].inputs,images:['66',0],audio:['60',0],fps:24};
+    delete graph['5'];delete graph['8'];
   }
   return graph;
 }
@@ -149,7 +154,7 @@ http.createServer(async (request, response) => {
     const state=await require('./renderer-readiness').rendererReadiness(comfyUrl);
     return send(response,state.ok?200:503,state);
   }
-  if (request.method === "GET" && request.url === "/health") {let queue=null;try{queue=await comfyRequest("/queue")}catch{}return send(response,200,{ok:true,connector:"AI MOVIE STUDIO Local Connector",node:{name:"NODE_01"},h3WorkerConfigured:true,performanceAudioVersion:1,rendererOnline:!!queue,running:queue?.queue_running?.length??null,queued:queue?.queue_pending?.length??null,historyCount:jobs.size});}
+  if (request.method === "GET" && request.url === "/health") {let queue=null;try{queue=await comfyRequest("/queue")}catch{}return send(response,200,{ok:true,connector:"AI MOVIE STUDIO Local Connector",node:{name:"NODE_01"},h3WorkerConfigured:true,performanceAudioVersion:2,rendererOnline:!!queue,running:queue?.queue_running?.length??null,queued:queue?.queue_pending?.length??null,historyCount:jobs.size});}
   if (request.method === "GET" && request.url === "/jobs") return send(response, 200, {jobs:[...jobs.values()]});
   if(request.method==='POST'&&request.url==='/reference-videos'){try{const data=await body(request);return send(response,201,await require('./prompt-video').uploadVideo(data.file,comfyUrl))}catch(error){return send(response,400,{error:error.message})}}
   if(request.method==='POST'&&request.url==='/references') {try{const data=await body(request);return send(response,201,await uploadReference(data.dataUrl,comfyUrl))}catch(error){return send(response,400,{error:error.message})}}

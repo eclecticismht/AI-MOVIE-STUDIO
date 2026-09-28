@@ -60,7 +60,7 @@ async function performanceAudioPreflight(shots){
  for(const shot of shots){const draft=performanceAudioDrafts.get(performanceAudioKey(shot));if(draft&&performanceAudioDirty(draft))throw Error('有未保存的配音参考，请先保存或移除绑定');}
  if(!shots.some(s=>s.performanceAudio))return;
  const response=await fetch('/api/performance-audio',{signal:AbortSignal.timeout(5000)}),out=await response.json();
- if(!response.ok||out.version!==1||!out.connectorReady)throw Error('配音生成链路尚未生效，请重启网页服务和本地 Connector，再刷新工作室');
+ if(!response.ok||out.version!==2||!out.connectorReady)throw Error('配音口型修正尚未生效，请重启网页服务和本地 Connector，再刷新工作室');
 }
 const performanceAudioInspectorBase=tlInspector;
 tlInspector=function(){performanceAudioInspectorBase();performanceAudioRender()};

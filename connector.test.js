@@ -38,17 +38,32 @@ function harness(fetchImpl,seed=[],policyCheck=()=>{},performanceAudio) {
 const reply=data=>({ok:true,json:async()=>data});
 const job={id:'test',prompt:'A city at dawn',duration:5};
 
-test('approved performance conditions H3 with the same source waveform in the generated video',async()=>{
+test('approved performance locks target audio through sampling and keeps original PCM at output',async()=>{
  const Contract=require('./performance-audio-contract'),events=[{type:'speech',speakerId:'xm',speakerName:'西门清',delivery:'onscreen',text:'今天换。'}],binding={version:1,file:'ams-audio-'+'a'.repeat(64)+'.wav',sha256:'a'.repeat(64),duration:4,frames:90,speechKey:Contract.speechKey(events)};let uploads=0,prompts=0;
  const performanceAudio={...require('./performance-audio'),validate:Contract.validate,upload:async()=>{uploads++;if(uploads===1)throw Error('upload checksum failed')}};
  const request=harness(async(url,options)=>{if(url.endsWith('/prompt')){prompts++;return reply({prompt_id:'p1'})}return reply({})},[],()=>{},performanceAudio);
- assert.equal((await request('POST','/jobs',{...job,duration:4,performanceAudio:binding,dialogueEvents:events})).status,202);
+ const references=[{assetId:'xm',kind:'characters',name:'西门清',file:'ams-ref-'+'b'.repeat(64)+'.png'},{assetId:'motion',kind:'videos',name:'Motion',file:'ams-video-'+'c'.repeat(64)+'.mp4'}];
+ assert.equal((await request('POST','/jobs',{...job,duration:4,h3Attention:'sage',references,performanceAudio:binding,dialogueEvents:events})).status,202);
  const graph=(await request('GET','/jobs/test/graph')).data.prompt;
  assert.match(graph['1'].inputs.unet_name,/ref2va/);assert.equal(graph['60'].class_type,'LoadAudio');assert.equal(graph['60'].inputs.audio,binding.file);
- assert.deepEqual(graph['8'].inputs['ref_audios.ref_audio_0'],['60',0]);assert.deepEqual(graph['5'].inputs.audio_vae,['4',0]);assert.deepEqual(graph['6'].inputs.audio,['60',0]);assert.deepEqual(JSON.parse(graph['5'].inputs.timeline_data).output,{mode:'fixed',width:864,height:480,audioMode:'source'});
+ const conditioning=graph['61'].inputs;
+ assert.equal(graph['5'],undefined);assert.equal(graph['8'],undefined);
+ assert.equal(conditioning.audio_mode,'lock_source');assert.equal(conditioning.audio_denoise_strength,0);assert.equal(conditioning.add_source_as_reference,true);
+ assert.deepEqual(conditioning.drive_audio,['60',0]);assert.deepEqual(conditioning.audio_vae,['4',0]);assert.deepEqual(conditioning['ref_images.ref_image_0'],['20',0]);assert.deepEqual(conditioning['ref_videos.ref_video_0'],['41',0]);
+ assert.equal(conditioning.width,864);assert.equal(conditioning.height,480);assert.equal(conditioning.length,90);assert.match(conditioning.prompt,/<Audio 1>: fully_copy/);
+ assert.deepEqual(graph['62'].inputs,{model:['902',0],av_latent:['61',1],steps:25,shift_video:12,shift_audio:3,sampler_name:'res_multistep',scheduler:'simple'});
+ assert.deepEqual(graph['63'].inputs,{model:['62',0],conditioning:['61',0]});assert.deepEqual(graph['65'].inputs,{noise:['64',0],guider:['63',0],sampler:['62',1],sigmas:['62',2],latent_image:['61',1]});
+ assert.deepEqual(graph['66'].inputs.av_latent,['65',0]);assert.deepEqual(graph['6'].inputs,{images:['66',0],audio:['60',0],fps:24,bit_depth:8});
+ assert.equal((await request('GET','/health')).data.performanceAudioVersion,2);
  assert.equal((await request('POST','/jobs/test/comfy')).status,502);assert.equal(prompts,0);
  assert.equal((await request('POST','/jobs/test/comfy')).status,202);assert.equal(prompts,1);
  assert.equal((await request('POST','/jobs/test/comfy')).status,200);assert.equal(uploads,2);assert.equal(prompts,1);
+});
+test('historical execution graphs stay unchanged after the audio-lock upgrade',async()=>{
+ const executionGraph={'5':{class_type:'MiniMaxH3Director',inputs:{old:true}}};
+ const request=harness(async()=>{throw Error('must not resubmit')},[{...job,executionGraph,comfyPromptId:'old-prompt'}]);
+ assert.deepEqual((await request('GET','/jobs/test/graph')).data.prompt,executionGraph);
+ assert.equal((await request('POST','/jobs/test/comfy')).data.job.comfyPromptId,'old-prompt');
 });
 test('project hold prevents new queue writes and submitting an older unsent job',async()=>{
  let upstream=0;const request=harness(async()=>{upstream++;throw Error('unexpected upstream')},[{...job,projectId:'held'}],projectId=>{assert.equal(projectId,'held');throw Error('H3 项目处于准备阶段')});
