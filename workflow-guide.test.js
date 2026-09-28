@@ -16,6 +16,11 @@ test('pacing recommendations leave dialogue unchanged and ignore screen text',()
   const events=[{type:'speech',text:'我不是西门庆，我叫西门清，明月松间照，清泉石上流的清。'}],before=JSON.stringify(events);
   assert.match(pace(events,8),/对白节奏建议/);assert.equal(pace(events,12),'');assert.equal(pace([{type:'screen',text:'a'.repeat(80)}],4),'');assert.equal(JSON.stringify(events),before);
 });
+test('preparation projects prioritize dialogue and voice even when legacy shots and videos exist',()=>{
+ const data={projects:[{id:'p',storyText:'story',productionPolicy:{generationHold:true}}],scripts:[{projectId:'p'}],shots:[{projectId:'p'}],generations:[{projectId:'p',status:'待审核'}]};
+ assert.deepEqual(summary(data,'p').next,{page:'scripts',label:'核对对白与声音准备'});
+ data.projects[0].productionPolicy.generationHold=false;assert.equal(summary(data,'p').next.page,'review');
+});
 test('failed preflight blocks batch before images are uploaded or jobs saved',async()=>{
   const vm=require('node:vm'),fs=require('node:fs');let uploads=0,saves=0,message='';
   const p={id:'p'},shot={id:'s',projectId:'p',status:'待制作'};
@@ -32,4 +37,12 @@ test('retry submits only unsent current-project jobs and preserves remote jobs',
   await vm.runInContext('startRenderQueue()',context);
   assert.deepEqual(sent,['wait','retry']);assert.equal(jobs[2].comfyPromptId,'remote-id');
   sent.length=0;context.fetch=async()=>{throw Error('offline')};await vm.runInContext('startRenderQueue()',context);assert.equal(sent.length,0);
+});
+
+test('preparation hold blocks queue and preflight before any network or writes',async()=>{
+ const vm=require('node:vm'),fs=require('node:fs');let requests=0;
+ const context=vm.createContext({D:{activeProjectId:'p',projects:[{id:'p',productionPolicy:{generationHold:true}}],jobs:[]},fetch:async()=>{requests++;throw Error('unexpected')},document:{querySelector:()=>null},renderShots2(){},renderCockpit(){},renderGeneration(){},renderQueueMessages:new Map()});
+ vm.runInContext(fs.readFileSync('workflow-guide-ui.js','utf8'),context);
+ await assert.rejects(vm.runInContext('workflowPreflight([])',context),/准备阶段/);
+ await vm.runInContext('startRenderQueue()',context);assert.equal(requests,0);assert.match(vm.runInContext("renderQueueMessages.get('p')",context),/准备阶段/);
 });

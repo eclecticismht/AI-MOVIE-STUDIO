@@ -43,7 +43,7 @@ function assTime(value){
 
 // Source caption times follow trims and the new order. During a transition,
 // switch captions at its midpoint so outgoing and incoming text never pile up.
-function timelineAss(clips,shots){
+function timelineAss(clips,shots,{qhd=false}={}){
  const events=[];let offset=0;
  clips.forEach((clip,index)=>{
   offset-=clip.overlap||0;
@@ -60,7 +60,10 @@ function timelineAss(clips,shots){
   }
   offset+=clip.duration;
  });
- return {ass:makeAss([])+events.join('\n')+'\n',cueCount:events.length};
+ // ASS coordinates remain 1280x720 virtual units, including screen-card
+ // positions. libass rasterizes them directly on the final 2K frame.
+ const header=qhd?makeAss([]).replace('Style: Default,Microsoft YaHei,30,','Style: Default,Noto Sans SC,25,').replace('1,2,1,2,40,40,40,1','1,1.5,0.5,2,64,64,50,1'):makeAss([]);
+ return {ass:header+events.join('\n')+'\n',cueCount:events.length};
 }
 
 module.exports={filmReference,sourceShot,timelineAss};

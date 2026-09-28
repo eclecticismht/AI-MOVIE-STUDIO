@@ -38,7 +38,7 @@ body>main{min-width:0}
 <section id="cockpit" class="page"><div style="display:flex;justify-content:space-between;align-items:end"><div><p class="muted">项目驾驶舱</p><h1 id="cockpitTitle">项目</h1><p class="muted" id="cockpitMeta"></p></div><button class="btn" onclick="go('studio')">← 返回 Studio</button></div>
 <div class="cockpitTabs"><button onclick="cockpitJump('bible')">📖 项目圣经</button><button onclick="go('scripts')">✍️ 剧本</button><button onclick="go('characters')">🎭 角色</button><button onclick="go('scenes')">🏙 场景</button><button onclick="cockpitJump('props')">🎒 道具</button><button onclick="go('shots')">🎞 分镜</button><button onclick="go('gen')">⚡ AI生成</button><button onclick="go('review')">👁 审片</button><button onclick="go('audio')">🎙 声音</button><button onclick="go('edit')">✂️ 自动成片</button><button onclick="go('masters')">📦 成片</button><button onclick="go('data')">📊 数据</button></div>
 <div class="cockpitHero"><div><div class="card"><h3>制作进度</h3><div class="bigstat" id="cpProgress"></div><div class="bar"><i id="cpBar"></i></div><div class="cockpitGrid" id="cpKpis"></div></div><div class="card"><h3>当前制作阶段</h3><div id="cpPhases"></div></div></div>
-<div><div class="card"><h3>今日应该处理</h3><div id="cpTodo"></div></div><div class="card"><h3>生产节点</h3><b>NODE_01</b><p class="muted">RTX Pro 4000 · 24GB</p><p>等待 Local Connector</p></div></div></div>
+<div><div class="card"><h3>今日应该处理</h3><div id="cpTodo"></div></div><div class="card"><h3>生产节点</h3><b>NODE_01</b><p class="muted">RTX Pro 4000 · 24GB</p><p id="cockpitNodeStatus">正在读取渲染器状态…</p></div></div></div>
 <div class="card" id="bible"><h3>📖 项目圣经</h3><div id="cpBible"></div></div><div class="card" id="props"><h3>🎒 核心道具</h3><div id="cpProps"></div></div></section><section id="stories" class="page"><h1>故事库</h1><p class="muted">灵感、社会新闻、原创故事、小说/IP与待开发故事统一进入这里。</p>
 <div class="grid"><div class="card"><b>灵感收集</b><p class="muted">随手记录故事种子</p></div><div class="card"><b>社会新闻</b><p class="muted">真实事件改编素材</p></div><div class="card"><b>原创故事</b><p class="muted">原创项目孵化</p></div><div class="card"><b>待开发</b><p class="muted">进入项目之前的候选池</p></div></div>
 <div class="card"><h3>当前核心故事</h3><b>《人生评分99分》</b><p>一个男人即将获得99分人生，却发现妻子的评分正在归零。</p></div></section>
@@ -73,11 +73,12 @@ body>main{min-width:0}
 <section id="assets" class="page"><h1>资产中心</h1><div class="grid"><div class="card"><b>角色</b><p>陈伟 CW_001</p><p>李娜 LN_001</p></div><div class="card"><b>场景</b><p>办公室</p><p>未来城市CBD</p></div><div class="card"><b>道具</b><p>人生评分 APP</p></div></div></section>
 <section id="data" class="page"><h1>300 / 90 数据</h1><div class="card">目标：300分钟 / 90天 · 要求平均日产约 3.33 分钟最终成片。</div></section>
 <section id="settings" class="page"><h1>设置</h1><div class="card"><b class="ok">✓ Web 工作台：已运行</b><p>数据：浏览器 localStorage</p><p>Render Node：等待 Connector</p><p>Minimax H3：等待 Connector</p><p class="muted">请使用下方工作区备份与恢复管理数据。</p></div></section>
+<script src="vendor/lz-string/lz-string.js"></script>
 <script src="workspace-store.js"></script>
 <script src="workspace-bootstrap.js"></script>
 <script src="/api/workspace/bootstrap.js"></script>
 <script>
-try{WorkspaceBootstrap.hydrate(globalThis.localStorage,globalThis.workspaceDiskStartup)}catch(error){console.error('磁盘项目载入失败，现有浏览器数据保留',error)}
+try{WorkspaceBootstrap.hydrate(WorkspaceStore.create(globalThis.localStorage),globalThis.workspaceDiskStartup)}catch(error){console.error('磁盘项目载入失败，现有浏览器数据保留',error)}
 const localStorage=WorkspaceStore.create(globalThis.localStorage,{onSave:value=>{if(typeof workspaceChanged==='function')workspaceChanged(value)},onFailure:(error,raw)=>{if(raw)D=JSON.parse(raw);if(typeof workspaceStatus==='function')workspaceStatus('保存失败，内存数据已回到上次保存版本：'+error.message);else alert(error.message)}});
 const INITIAL=WorkspaceBootstrap.initial; let D=JSON.parse(localStorage.getItem("aimovie_data")||JSON.stringify(INITIAL)),editing=null;
 function migrate(){

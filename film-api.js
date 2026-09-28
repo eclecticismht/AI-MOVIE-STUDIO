@@ -47,7 +47,8 @@ function validatePlan(input){
     }
     if(s.audioMode==='voiceover'&&require('./audio-assets').duration(s.audioAsset)>(17*Math.round((s.duration*24-5)/17)+5)/24+0.04)throw Error('独立画外声长于镜头，请延长镜头或分段，避免截断播报');
     if(s.sourceFingerprint!==undefined&&!/^[a-f0-9]{64}$/.test(s.sourceFingerprint))throw Error('来源校验信息无效');
-    return {faceRefineMode:require('./face-refine').mode(s.faceRefineMode),cropBottomPercent:Framing.validateBottomCrop(s.cropBottomPercent),...(s.sourceFingerprint?{sourceFingerprint:s.sourceFingerprint}:{}),...(s.continueFromShotId?{continueFromShotId:s.continueFromShotId,continuitySpeakerPosition:s.continuitySpeakerPosition}:{}),firstFrame:validateFirstFrame(s.firstFrame),...(['replacement','overlay','voiceover'].includes(s.audioMode)?{audioAsset:(resolveAudioAsset(s.audioAsset),s.audioAsset)}:{}),audioMode:ShotAudio.validate(s.audioMode,dialogueEvents,s.audioAsset),...(s.renderMode==='black'?{renderMode:'black'}:{}),...(screen?{renderMode:'screen',...screen}:{}),screenCards:ScreenCards.validate(s.screenCards||[],s.sourceExcerpt),sourceExcerpt:typeof s.sourceExcerpt==='string'?s.sourceExcerpt.slice(0,30000):'',...(dialogueEvents?{dialogueEvents}:{}),references:validateReferences(s.references),shotId:s.shotId,sequence:index+1,prompt:s.prompt,duration:s.duration,width:s.width,height:s.height,subtitle:typeof s.subtitle==='string'?s.subtitle.slice(0,5000):''};
+    if(s.h3Attention!==undefined&&!['pytorch','sage'].includes(s.h3Attention))throw Error('H3 注意力模式无效');
+    return {h3Attention:s.h3Attention||'pytorch',faceRefineMode:require('./face-refine').mode(s.faceRefineMode),cropBottomPercent:Framing.validateBottomCrop(s.cropBottomPercent),...(s.sourceFingerprint?{sourceFingerprint:s.sourceFingerprint}:{}),...(s.continueFromShotId?{continueFromShotId:s.continueFromShotId,continuitySpeakerPosition:s.continuitySpeakerPosition}:{}),firstFrame:validateFirstFrame(s.firstFrame),...(['replacement','overlay','voiceover'].includes(s.audioMode)?{audioAsset:(resolveAudioAsset(s.audioAsset),s.audioAsset)}:{}),audioMode:ShotAudio.validate(s.audioMode,dialogueEvents,s.audioAsset),...(s.renderMode==='black'?{renderMode:'black'}:{}),...(screen?{renderMode:'screen',...screen}:{}),screenCards:ScreenCards.validate(s.screenCards||[],s.sourceExcerpt),sourceExcerpt:typeof s.sourceExcerpt==='string'?s.sourceExcerpt.slice(0,30000):'',...(dialogueEvents?{dialogueEvents}:{}),references:validateReferences(s.references),shotId:s.shotId,sequence:index+1,prompt:s.prompt,duration:s.duration,width:s.width,height:s.height,subtitle:typeof s.subtitle==='string'?s.subtitle.slice(0,5000):''};
   });
   return {projectId:input.projectId,title:input.title.slice(0,120),shots};
 }
@@ -115,7 +116,7 @@ async function work(run){
         if(shot.continuitySpeakerPosition)firstFrame.speakerPosition=shot.continuitySpeakerPosition;
         shot.continuityFrame={...firstFrame,fromShotId:previous.shotId,fromJobId:previous.jobId};save(run);
       }
-      const accepted=await connector('/jobs',{id:jobId,projectId:run.projectId,shot:shot.shotId,prompt:shot.prompt,faceRefineMode:shot.faceRefineMode,firstFrame,references:shot.references,dialogueEvents:shot.audioMode==='voiceover'?[]:shot.dialogueEvents,sourceFingerprint:shot.sourceFingerprint,duration:shot.duration,width:shot.width,height:shot.height,model:'Minimax H3',candidates:1});
+      const accepted=await connector('/jobs',{id:jobId,projectId:run.projectId,shot:shot.shotId,prompt:shot.prompt,h3Attention:shot.h3Attention,faceRefineMode:shot.faceRefineMode,firstFrame,references:shot.references,dialogueEvents:shot.audioMode==='voiceover'?[]:shot.dialogueEvents,sourceFingerprint:shot.sourceFingerprint,duration:shot.duration,width:shot.width,height:shot.height,model:'Minimax H3',candidates:1});
       shot.jobId=jobId;save(run);
       if(!accepted.job?.comfyPromptId&&!accepted.job?.submissionPending)try{await connector('/jobs/'+jobId+'/comfy',{})}catch(error){
         // A lost POST response may already have started GPU work. Poll/reconcile
@@ -281,6 +282,7 @@ function createFilmApi(){
         const raw=await require('./request-body').readUtf8(req,8000000,'分镜计划过大');
         const plan=validatePlan(JSON.parse(raw)),existing=[...runs.values()].find(r=>r.projectId===plan.projectId&&['rendering','assembling'].includes(r.status));
         if(existing){send(409,{error:'此项目已有制作任务，请先查看当前进度。',run:publicRun(existing)});return true}
+        require('./production-policy').assertGenerationAllowed(plan.projectId);
         const run={...plan,deferQualityReview:true,qualityGate:true,alignSubtitles:true,id:'film_'+crypto.randomBytes(8).toString('hex'),status:'pending',createdAt:new Date().toISOString()};runs.set(run.id,run);save(run);void work(run);send(202,{run:publicRun(run)});return true;
       }
       const match=pathname.match(/^\/api\/film\/(film_[a-f0-9]{16})(?:\/(video|resume|pause|audit|retry|recompose|align|accept-review|recheck|recheck-pending|retry-batch|validate-revision|preview))?$/),run=match&&runs.get(match[1]);
@@ -290,6 +292,7 @@ function createFilmApi(){
         const deletion=require('./film-delete');deletion.canDeleteFilm(run,projectId,busy.has(run.id)||auditing.has(run.id));
         deletion.deleteFilmFiles(ROOT,run.id);runs.delete(run.id);send(200,{deleted:run.id});return true;
       }
+      if(req.method==='POST'&&['retry','retry-batch','resume'].includes(match[2]))require('./production-policy').assertGenerationAllowed(run.projectId);
       if(req.method==='POST'&&run.rechecking)throw Error('正在重新检查声音，请稍后');
       if(req.method==='POST'&&match[2]==='recheck-pending'){
         if(!['paused','failed'].includes(run.status))throw Error('请先等待制作结束或暂停');

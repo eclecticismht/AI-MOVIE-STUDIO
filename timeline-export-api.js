@@ -5,16 +5,32 @@ const ROOT=path.join(__dirname,'timeline-exports'),FFMPEG=process.env.FFMPEG_PAT
 const OUTPUTS=Object.freeze({
   '1280x720':Object.freeze({width:1280,height:720,label:'HD',upscaled:false}),
   '1920x1080':Object.freeze({width:1920,height:1080,label:'Full HD',upscaled:true}),
+  '2560x1440':Object.freeze({width:2560,height:1440,label:'2K QHD（常规缩放）',upscaled:true}),
   '3840x2160':Object.freeze({width:3840,height:2160,label:'4K UHD（上采样）',upscaled:true})
 });
 const running=new Set();
 function outputSettings(value){
   const preset=value||'1280x720',settings=OUTPUTS[preset];
-  if(!settings)throw Error('请选择支持的成片分辨率：1280x720、1920x1080 或 3840x2160');
+  if(!settings)throw Error('请选择支持的成片分辨率：1280x720、1920x1080、2560x1440 或 3840x2160');
   return {preset,...settings};
 }
 function outputResolutions(){return Object.keys(OUTPUTS)}
+function requiredExportBytes(plan){
+  const seconds=plan.clips.reduce((sum,clip)=>sum+clip.duration,0),{width,height}=plan.output;
+  // Budget uncompressed 10-bit intermediates plus source copies and output;
+  // FFV1 usually needs less. Keep 8 GiB free for the rest of the studio.
+  return Math.ceil(seconds*(width*height*3*24+48000*6)*1.2+plan.clips.length*512*1024**2+8*1024**3);
+}
+function assertExportSpace(plan,root=__dirname,io=fs){
+  const stats=io.statfsSync(root),available=Number(stats.bavail)*Number(stats.bsize),required=requiredExportBytes(plan);
+  if(available<required)throw Error(`导出空间不足：此次无损中间素材需预留约 ${Math.ceil(required/1024**3)} GB，当前可用 ${Math.floor(available/1024**3)} GB。请先备份并整理已完成导出，再重试。`);
+}
 function outputScaleFilter(value){const output=typeof value==='string'?outputSettings(value):value||outputSettings();return `scale=${output.width}:${output.height}:flags=lanczos,setsar=1,format=yuv420p`}
+function intermediateFilter(output,aspectMode='pad',colorMode='preserve'){
+  const {width,height}=output;
+  const fit=aspectMode==='crop'?`scale=${width}:${height}:force_original_aspect_ratio=increase:force_divisible_by=2:flags=lanczos,crop=${width}:${height}`:`scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`;
+  return `fps=24,${colorMode==='bt709'?'colorspace=all=bt709:range=tv:format=yuv420p10,':''}${fit},setsar=1,format=yuv420p10le`;
+}
 function sourceLocation(value){
   const u=new URL(value,'http://127.0.0.1:4173');
   if(u.username||u.password||u.hash)throw Error('素材地址无效');
@@ -38,7 +54,9 @@ function validate(input){
   const edit={order:sources.map(s=>s.id),clips:Object.fromEntries(sources.map(s=>[s.id,s]))},clips=Edit.build(sources,edit),mix=Edit.mix(input.mix);
   if(mix.musicFile)resolveAudioAsset(mix.musicFile);
   if(clips.at(-1).end>1800)throw Error('单次剪辑导出最长 30 分钟');
-  return {projectId:input.projectId,title:String(input.title||'时间线剪辑版').slice(0,120),clips:clips.map(c=>({...c.shot,...c.edit,overlap:c.overlap,duration:c.duration})),mix,output:outputSettings(input.outputResolution)};
+  const aspectMode=input.aspectMode||'pad';if(!['pad','crop'].includes(aspectMode))throw Error('画面适配方式无效');
+  const colorMode=input.colorMode||'preserve';if(!['preserve','bt709'].includes(colorMode))throw Error('色彩转换方式无效');
+  return {projectId:input.projectId,title:String(input.title||'时间线剪辑版').slice(0,120),clips:clips.map(c=>({...c.shot,...c.edit,overlap:c.overlap,duration:c.duration})),mix,output:outputSettings(input.outputResolution),aspectMode,colorMode};
 }
 function command(args){return new Promise((resolve,reject)=>{const p=spawn(FFMPEG,args,{windowsHide:true,stdio:['ignore','ignore','pipe']});let log='';p.stderr.on('data',b=>log=(log+b).slice(-20000));p.on('error',reject);p.on('close',code=>code===0?resolve(log):reject(Object.assign(Error('合成失败：'+log.slice(-1200)),{log})))})}
 async function download(location,file){if(location.file){await fs.promises.copyFile(location.file,file);return}const r=await fetch(location.url,{redirect:'error',signal:AbortSignal.timeout(120000)});if(!r.ok)throw Error('视频无法读取：HTTP '+r.status);let size=0;await pipeline(Readable.fromWeb(r.body),new Transform({transform(chunk,encoding,cb){size+=chunk.length;cb(size>512*1024*1024?Error('单个素材超过512MB'):null,chunk)}}),fs.createWriteStream(file))}
@@ -64,7 +82,7 @@ function audioFilter(clip,mix,shot){
 }
 async function work(run){
   running.add(run.id);const dir=path.join(ROOT,run.id);try{
-    run.status='rendering';save(run);
+    run.status='rendering';const output=run.plan.output||outputSettings();run.processing={intermediate:'FFV1 / PCM',workingWidth:output.width,workingHeight:output.height,scaling:'lanczos',aiSuperResolution:false,color:run.plan.colorMode||'preserve',captions:'rendered_at_output_resolution'};save(run);
     const captionShots=run.plan.clips.map(clip=>Subtitles.sourceShot(clip,id=>JSON.parse(fs.readFileSync(path.join(__dirname,'film-runs',id,'run.json'),'utf8'))));
     for(const [i,c] of run.plan.clips.entries()){
       run.message='整理镜头 '+(i+1)+' / '+run.plan.clips.length;save(run);const file=path.join(dir,'source-'+i+'.mp4');await download(sourceLocation(c.url),file);
@@ -72,21 +90,23 @@ async function work(run){
       const match=/Duration: (\d+):(\d+):([\d.]+)/.exec(info);if(!match)throw Error('视频缺少可读取的时长');const actual=Number(match[1])*3600+Number(match[2])*60+Number(match[3]);
       if(c.trimOut>actual+0.08)throw Error('第 '+(i+1)+' 镜裁切出点超过实际视频时长，请加载预览后重新设置。');
       const hasAudio=/Audio:/.test(info),extra=c.audioMode==='voiceover'?['-ss',String(c.trimIn),'-i',resolveAudioAsset(c.audioAsset)]:c.audioMode==='replacement'?['-stream_loop','-1','-i',resolveAudioAsset(c.audioAsset)]:!hasAudio||c.audioMode==='mute'?['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']:[];
-      await command(['-y','-ss',String(c.trimIn),'-i',file,...extra,'-t',String(c.duration),'-map','0:v:0','-map',extra.length?'1:a:0':'0:a:0','-vf','fps=24,scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p','-af',audioFilter(c,run.plan.mix,captionShots[i]),'-c:v','libx264','-preset','fast','-crf','20','-c:a','aac','-ac','2',path.join(dir,'clip-'+i+'.mp4')]);
+      // Work at delivery size once and retain lossless intermediates. In
+      // particular, never downsample an existing HD source to 720p first.
+      await command(['-y','-ss',String(c.trimIn),'-i',file,...extra,'-t',String(c.duration),'-map','0:v:0','-map',extra.length?'1:a:0':'0:a:0','-vf',intermediateFilter(output,run.plan.aspectMode,run.plan.colorMode),'-af',audioFilter(c,run.plan.mix,captionShots[i]),'-c:v','ffv1','-level','3','-c:a','pcm_s24le','-ar','48000','-ac','2',path.join(dir,'clip-'+i+'.mkv')]);
     }
     run.message='合成转场与混音';save(run);
-    const clips=run.plan.clips.map(c=>({duration:c.duration,overlap:c.overlap,edit:c})),graph=Edit.graph(clips),inputs=run.plan.clips.flatMap((_,i)=>['-i',path.join(dir,'clip-'+i+'.mp4')]);
+    const clips=run.plan.clips.map(c=>({duration:c.duration,overlap:c.overlap,edit:c})),graph=Edit.graph(clips),inputs=run.plan.clips.flatMap((_,i)=>['-i',path.join(dir,'clip-'+i+'.mkv')]);
     const filters=clips.flatMap((_,i)=>[`[${i}:v]settb=AVTB,setpts=PTS-STARTPTS,fps=24[v${i}]`,`[${i}:a]atrim=duration=${clips[i].duration},asetpts=PTS-STARTPTS[a${i}]`]).concat(graph.filters),mix=run.plan.mix;
     if(mix.musicFile){inputs.push('-stream_loop','-1','-ss',String(mix.musicOffset),'-i',resolveAudioAsset(mix.musicFile));filters.push(`[${clips.length}:a]atrim=duration=${graph.duration},asetpts=PTS-STARTPTS,volume=${mix.musicVolume}[music]`,`[${graph.audio}][music]amix=inputs=2:duration=first:normalize=0,volume=${mix.master},alimiter=limit=0.95:level=false:latency=true[mixed]`)}
     else filters.push(`[${graph.audio}]volume=${mix.master},alimiter=limit=0.95:level=false:latency=true[mixed]`);
-    const captions=Subtitles.timelineAss(run.plan.clips,captionShots);let video=graph.video;
+    const captions=Subtitles.timelineAss(run.plan.clips,captionShots,{qhd:output.preset==='2560x1440'});let video='sized';
+    filters.push(`[${graph.video}]${outputScaleFilter(output)}[sized]`);
     if(captions.cueCount){
       const file=path.join(dir,'subtitles.ass');fs.writeFileSync(file,captions.ass);
       const escaped=file.replace(/\\/g,'/').replace(/:/g,'\\:').replace(/'/g,"\\'");
       filters.push('['+video+"]ass='"+escaped+"'[captioned]");video='captioned';
     }
-    const output=run.plan.output||outputSettings();filters.push(`[${video}]${outputScaleFilter(output)}[master]`);
-    await command(['-y',...inputs,'-filter_complex_threads','1','-filter_complex',filters.join(';'),'-map','[master]','-map','[mixed]','-t',String(graph.duration),'-c:v','libx264','-preset','fast','-crf','20','-pix_fmt','yuv420p','-c:a','aac','-movflags','+faststart',path.join(dir,'movie.mp4')]);
+    await command(['-y',...inputs,'-filter_complex_threads','1','-filter_complex',filters.join(';'),'-map','['+video+']','-map','[mixed]','-t',String(graph.duration),'-c:v','libx264','-preset','fast','-crf','18','-pix_fmt','yuv420p','-r','24','-c:a','aac','-b:a','320k','-ar','48000','-ac','2','-movflags','+faststart',path.join(dir,'movie.mp4')]);
     run.status='complete';run.duration=graph.duration;run.url='/timeline-exports/'+run.id+'/movie.mp4';run.message='剪辑版已导出，请审阅转场、声音和对白完整性。';save(run);
   }catch(e){run.status='failed';run.message=e.message;save(run)}finally{running.delete(run.id)}
 }
@@ -105,11 +125,11 @@ async function timelineExportApi(req,res,pathname){
     }
     if(pathname==='/api/timeline-export'&&req.method==='POST'){
       if(running.size)throw Error('已有剪辑版正在导出，请完成后再试');const plan=validate(JSON.parse(await require('./request-body').readUtf8(req,400000,'剪辑计划过大'))),id='cut_'+crypto.randomBytes(8).toString('hex'),run={id,status:'pending',plan,createdAt:new Date().toISOString(),message:'准备导出'};
-      fs.mkdirSync(path.join(ROOT,id),{recursive:true});save(run);void work(run);send(202,{id,status:run.status});return true;
+      assertExportSpace(plan);fs.mkdirSync(path.join(ROOT,id),{recursive:true});save(run);void work(run);send(202,{id,status:run.status});return true;
     }
     const match=/^\/api\/timeline-export\/(cut_[a-f0-9]{16})$/.exec(pathname);
     if(match&&req.method==='GET'){const run=JSON.parse(fs.readFileSync(path.join(ROOT,match[1],'run.json'),'utf8'));if(['pending','rendering'].includes(run.status)&&!running.has(run.id)){run.status='failed';run.message='服务重启使此次导出中断，请重新导出；源素材已保留。'}delete run.plan;send(200,run);return true}
     send(404,{error:'剪辑接口不存在'});
   }catch(e){if(!res.headersSent)send(400,{error:e.message});else res.destroy()}return true;
 }
-module.exports={sourceLocation,validate,work,timelineExportApi,audioFilter,listExports,outputSettings,outputResolutions,outputScaleFilter};
+module.exports={sourceLocation,validate,work,timelineExportApi,audioFilter,listExports,outputSettings,outputResolutions,outputScaleFilter,intermediateFilter,requiredExportBytes,assertExportSpace};

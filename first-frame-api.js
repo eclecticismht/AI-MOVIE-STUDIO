@@ -14,6 +14,7 @@ function createFirstFrameApi({root=__dirname,fetchImpl=fetch,pollMs=2500}={}){
       j.status='running';j.startedAt||=new Date().toISOString();save(j);
       while(j.pass<j.totalPasses){
         if(!j.promptId){
+          require('./production-policy').assertGenerationAllowed(j.plan.projectId,root);
           if(j.submissionPending)throw Error('上次提交结果未知，已停止重复提交；请先检查 ComfyUI 队列。');
           const graph=buildGraph(j.plan,j.pass,j.previous,j.id);j.graphs[j.pass]=graph;j.submissionPending=true;save(j);
           const result=await json('/prompt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt:graph,client_id:j.id})});if(!result.prompt_id)throw Error('本地服务未返回生成编号');j.promptId=result.prompt_id;j.submissionPending=false;save(j);
@@ -43,6 +44,7 @@ function createFirstFrameApi({root=__dirname,fetchImpl=fetch,pollMs=2500}={}){
       if(url==='/api/first-frames'&&req.method==='POST'){
         const body=await require('./request-body').readUtf8(req,600000,'首帧请求过大');
         const plan=validatePlan(JSON.parse(body));const existing=[...jobs.values()].find(j=>['queued','running'].includes(j.status)&&j.plan.projectId===plan.projectId&&j.plan.shotId===plan.shotId);if(existing){if(JSON.stringify(existing.plan)!==JSON.stringify(plan))return send(409,{error:'此镜头已有生成任务。请等待完成后，再用修改后的分镜重新生成。'});return send(200,existing);}
+        require('./production-policy').assertGenerationAllowed(plan.projectId,root);
         const ready=await readiness();if(!ready.ready)throw Error('本地图像模型未就绪：'+ready.missing.join('、'));
         const raced=[...jobs.values()].find(j=>['queued','running'].includes(j.status)&&j.plan.projectId===plan.projectId&&j.plan.shotId===plan.shotId);if(raced)return send(409,{error:'此镜头已开始生成，请查看现有任务，避免重复提交。'});
         const j={id:'frame_'+crypto.randomBytes(8).toString('hex'),plan,status:'queued',pass:0,completedPasses:0,totalPasses:executionSteps(plan).length,graphs:[],outputs:[],createdAt:new Date().toISOString()};jobs.set(j.id,j);save(j);setImmediate(pump);return send(202,j);

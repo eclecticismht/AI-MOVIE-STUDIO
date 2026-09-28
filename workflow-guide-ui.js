@@ -21,7 +21,11 @@ function workflowShotIssues(shots){
   });
   return issues;
 }
+function workflowProductionPolicy(){return D.projects?.find(p=>p.id===D.activeProjectId)?.productionPolicy}
+function workflowProductionHold(){const p=workflowProductionPolicy();return p?.generationHold?'项目处于准备阶段，暂不生成新素材。'+(p.holdReason||'请先完成对白、配音与节奏验收。'):''}
+function workflowProductionPanel(){const p=workflowProductionPolicy();if(!p)return '';return `<div class="card"><h2>系列制作标准 · ${esc(p.phase||'准备中')}</h2><p>${esc(workflowProductionHold()||'生成限制已解除，仍需逐集审片。')}</p><p>横屏 16:9 · 默认生成 480p · 成片 2560 × 1440 · 24fps</p><p>剧情冲突 → 对白 → 配音 → 节奏 → 分镜 → 生成 → 剪辑与声音 → 锁片 → 2K超分 → 字幕与输出</p><p class="muted">只对锁片选中的素材超分；工作室常规缩放不能代替AI超分验收。</p></div>`}
 async function workflowPreflight(shots){
+  const hold=workflowProductionHold();if(hold)throw Error(hold);
   const snapshot=()=>JSON.stringify(shots.map(({beatIds,storyBinding,...content})=>content));
   const projectId=D.activeProjectId,baseline=snapshot();
   const errors=workflowShotIssues(shots).filter(i=>!i.warning);
@@ -50,17 +54,20 @@ async function inspectWorkflow(button){
 }
 function workflowCheckPanel(){return '<div class="card"><h2>生成前检查</h2><p class="muted">先检查图片、对白、时长和服务连接。节奏建议供审阅参考，不会自动改写原文；通过检查不代表生成质量已通过。</p><button class="btn" onclick="inspectWorkflow(this)">检查当前批次与服务（不渲染）</button><button class="btn" onclick="go(\'edit\')">选择关键镜头做样片</button><div data-workflow-output role="status" style="white-space:pre-wrap"></div></div>'}
 const workflowShotsBase=renderShots2;
-renderShots2=function(){workflowShotsBase();document.querySelector('#shots h1')?.insertAdjacentHTML('afterend',workflowCheckPanel())};
+renderShots2=function(){workflowShotsBase();document.querySelector('#shots h1')?.insertAdjacentHTML('afterend',workflowProductionPanel()+workflowCheckPanel())};
 const workflowCockpitBase=renderCockpit;
 renderCockpit=function(){
   workflowCockpitBase();
-  const s=WorkflowGuide.summary(D,D.activeProjectId);
+  document.getElementById('workflow-production')?.remove();
+  document.getElementById('cockpitTitle')?.insertAdjacentHTML('afterend','<div id="workflow-production">'+workflowProductionPanel()+'</div>');
+  const s=WorkflowGuide.summary(D,D.activeProjectId),policy=workflowProductionPolicy(),preparing=policy?.generationHold===true;
   document.getElementById('workflow-next')?.remove();
   document.getElementById('cockpitTitle')?.insertAdjacentHTML('afterend',`<div id="workflow-next" class="card"><h2>接下来做什么</h2><p>待提交 ${s.pending} · 已提交待完成 ${s.running} · 任务异常 ${s.failed} · 待审视频 ${s.review}</p><button class="btn gold" onclick="go('${s.next.page}')">${esc(s.next.label)}</button><button class="btn" onclick="go('shots')">检查分镜与制作条件</button><p class="muted">入队仅保存任务；生成视频后仍需审片。修改分镜或资产后，请核对重做范围。</p></div>`);
   const phases=document.getElementById('cpPhases');
-  if(phases)phases.innerHTML=[['故事',activeProject().storyText?'已录入原文':'待录入'],['剧本',s.scripts+' 份'],['分镜',s.shots+' 个有效镜头'],['生成',s.pending+' 待提交 / '+s.running+' 已提交待完成'],['审片',s.review+' 个视频待审核']].map(([a,b])=>'<div class="phase"><b>'+a+'</b><span style="float:right" class="muted">'+b+'</span></div>').join('');
+  const phaseRows=preparing?[['故事与冲突',activeProject().storyText?'已录入，按集复核':'待录入'],['对白版本',s.scripts+' 份，须区分历史稿与现行稿'],['声线与配音',policy.voiceDirectionConfirmed?'声线方向已确认，配音待验收':'声线待确认'],['实录节奏与分镜','实录后拆镜；已有 '+s.shots+' 镜待复核'],['视频生成','准备期间暂停新任务'],['历史素材',s.review+' 个视频待审'],['锁片与2K超分',policy.pictureLocked?'已锁片，核对入选素材':'尚未锁片，不进入超分']]:[['故事',activeProject().storyText?'已录入原文':'待录入'],['剧本',s.scripts+' 份'],['分镜',s.shots+' 个有效镜头'],['生成',s.pending+' 待提交 / '+s.running+' 已提交待完成'],['审片',s.review+' 个视频待审核']];
+  if(phases)phases.innerHTML=phaseRows.map(([a,b])=>'<div class="phase"><b>'+a+'</b><span style="float:right" class="muted">'+b+'</span></div>').join('');
   const todo=document.getElementById('cpTodo');if(todo)todo.textContent=s.next.label;
-  const kpis=document.getElementById('cpKpis');if(kpis)kpis.innerHTML=[['有效分镜',s.shots],['待提交任务',s.pending],['待审视频',s.review],['异常任务',s.failed]].map(([label,count])=>'<div class="k"><span class="muted">'+label+'</span><b>'+count+'</b></div>').join('');
+  const kpis=document.getElementById('cpKpis');if(kpis)kpis.innerHTML=[[preparing?'已有分镜（待复核）':'有效分镜',s.shots],['待提交任务',s.pending],['待审视频',s.review],['异常任务',s.failed]].map(([label,count])=>'<div class="k"><span class="muted">'+label+'</span><b>'+count+'</b></div>').join('');
   const p=activeProject(),b=p.bible||{},w=p.wizard||{},bible=document.getElementById('cpBible');
   if(bible)bible.innerHTML='<div class="formgrid">'+[['一句话故事',b.logline||w.logline],['核心命题',b.theme||w.theme],['视觉风格',b.style||w.style]].map(([label,value])=>'<div><span class="muted">'+label+'</span><p>'+esc(value||'尚未填写')+'</p></div>').join('')+'</div><button class="btn" onclick="go(\'stories\')">编辑故事与创作基线</button>';
 };
@@ -73,6 +80,7 @@ startRenderQueue=async function(){
   const projectId=D.activeProjectId;if(workflowSubmitting.has(projectId))return;
   workflowSubmitting.add(projectId);
   try{
+    const hold=workflowProductionHold();if(hold)throw Error(hold);
     await checkRendererReady();
     const pending=D.jobs.filter(j=>j.projectId===projectId&&!j.videoUrl&&!j.comfyPromptId&&(j.status==='等待本地 H3 Connector'||/发送失败/.test(j.status||'')));
     for(const job of pending){if(D.activeProjectId!==projectId)break;await dispatchJob(job.id)}

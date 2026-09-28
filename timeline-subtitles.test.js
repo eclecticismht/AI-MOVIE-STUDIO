@@ -4,6 +4,11 @@ const clip=(changes={})=>({sourceDuration:6,trimIn:0,trimOut:6,duration:6,overla
 const shot=(text='今天我40了，喝点。',start=1,end=5)=>({shotId:'s',duration:6,dialogueEvents:[{type:'speech',text}],subtitleTiming:{status:'aligned',cues:[{start,end,text}]}});
 const events=result=>result.ass.split('\n').filter(line=>line.startsWith('Dialogue:'));
 
+test('QHD captions use a readable Chinese style without changing cue timing',()=>{
+ const clips=[clip()],shots=[shot()],normal=timelineAss(clips,shots),qhd=timelineAss(clips,shots,{qhd:true});
+ assert.deepEqual(events(qhd),events(normal));assert.match(qhd.ass,/Style: Default,Noto Sans SC,25/);
+});
+
 test('resolve captions only for local automatic-film clip sources',()=>{
  assert.deepEqual(filmReference('/api/film/film_ab12/preview?index=4'),{runId:'film_ab12',index:4});
  assert.deepEqual(filmReference('/film-runs/film_ab12/clip-3.mp4'),{runId:'film_ab12',index:3});

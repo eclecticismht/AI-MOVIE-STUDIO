@@ -1,5 +1,19 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),os=require('os'),path=require('path');
 const {create}=require('./workspace-store'),{createStore}=require('./workspace-api');
+test('large Chinese workspaces fit browser quota, survive reload, and retain cross-tab checks',()=>{
+ let raw='{"projects":[]}',saved;const limit=500000;
+ const native={getItem:()=>raw,setItem(k,v){if(v.length>limit)throw Error('quota');raw=v}};
+ const large=JSON.stringify({projects:[{id:'series',name:'西门清🎬',text:'对白、人物、场景与版本历史。'.repeat(160000)}]});
+ assert.ok(large.length>limit);const adapter=create(native,{onSave:v=>saved=v});adapter.accept(large,raw);
+ assert.ok(raw.startsWith('AMS_LZ16_V1:'));assert.equal(create(native).getItem('aimovie_data'),large);
+ adapter.setItem('aimovie_data',large);assert.equal(saved,large);
+ const other=create(native);other.setItem('aimovie_data','{"projects":[{"id":"other"}]}');
+ assert.throws(()=>adapter.setItem('aimovie_data',large),/其他页面/);
+});
+test('broken compressed data is never mistaken for an empty workspace',()=>{
+ const native={getItem:()=> 'AMS_LZ16_V1:100:invalid'};
+ assert.throws(()=>create(native),/备份损坏/);
+});
 function data(name='A'){return {projects:[{id:'P',name}],activeProjectId:'P',...Object.fromEntries(['shots','jobs','generations','masters','audio','characters','scenes','props','scripts'].map(k=>[k,[]]))}}
 test('workspace disk uses compare-and-swap, sanitizes secrets and retains recovery snapshots',()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ams-workspace-'));

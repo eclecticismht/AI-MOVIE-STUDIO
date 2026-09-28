@@ -23,6 +23,11 @@ test('revision validates original words, keeps reference snapshots, and clears s
   assert.throws(()=>retryPlan({...parent,shots:[{...original,sourceExcerpt:''}]},0,{...revision,subtitle:''}),/原文依据/);
 });
 const shot={shotId:'one',duration:7.5,width:864,height:480,prompt:'A worker sits down.',subtitle:'陈实：钱没有再转。'};
+test('automatic film preserves the selected H3 attention route',()=>{
+ const plan=validatePlan({projectId:'p',title:'test',shots:[{...shot,h3Attention:'sage'}]});
+ assert.equal(plan.shots[0].h3Attention,'sage');
+ assert.throws(()=>validatePlan({projectId:'p',title:'test',shots:[{...shot,h3Attention:'unknown'}]}),/注意力/);
+});
 test('revision cannot reuse a first-frame position for a different visible speaker',()=>{
  const original={shotId:'s',duration:4,width:864,height:480,prompt:'Two people.',firstFrame:{file:'ams-ref-'+ 'a'.repeat(64)+'.png',speakerPosition:'left'},sourceExcerpt:'甲：你好。\n乙：再见。',dialogueEvents:[{type:'speech',speakerId:'a',speakerName:'甲',delivery:'onscreen',text:'你好。'}],references:[{assetId:'a',kind:'characters',name:'甲',file:'ams-ref-'+ 'b'.repeat(64)+'.png'},{assetId:'b',kind:'characters',name:'乙',file:'ams-ref-'+ 'c'.repeat(64)+'.png'}]};
  assert.throws(()=>retryPlan({id:'old',status:'complete',projectId:'p',title:'test',shots:[original]},0,{prompt:'Two people.',subtitle:'乙：再见。',duration:4}),/发声人物已改变/);

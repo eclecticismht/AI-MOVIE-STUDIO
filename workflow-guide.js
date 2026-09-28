@@ -15,6 +15,7 @@
     else if(review.length)next={page:'review',label:'审阅已生成的视频'};
     else if(pending.length||running.length)next={page:'gen',label:pending.length?'检查并提交待生成任务':'查看渲染进度'};
     else if(shots.every(s=>s.status==='完成'))next={page:'edit',label:'检查成片与导出'};
+    if(project.productionPolicy?.generationHold)next={page:'scripts',label:'核对对白与声音准备'};
     return {shots:shots.length,scripts:own('scripts').length,pending:pending.length,running:running.length,failed:failed.length,review:review.length,next};
   }
   function pace(events,duration){

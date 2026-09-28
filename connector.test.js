@@ -11,10 +11,11 @@ test('reference videos reach H3 as frame batches with distinct image and video l
  assert.equal(graph['40'].class_type,'LoadVideo');assert.equal(graph['41'].class_type,'GetVideoComponents');assert.deepEqual(graph['8'].inputs['ref_videos.ref_video_0'],['41',0]);assert.deepEqual(graph['8'].inputs['ref_images.ref_image_0'],['20',0]);assert.match(graph['5'].inputs.global_prompt,/<Video 1>/);assert.match(graph['5'].inputs.global_prompt,/<Picture 1>/);assert.equal(graph['8'].inputs['ref_video_audios.ref_video_audio_0'],undefined);
 });
 
-function harness(fetchImpl,seed=[]) {
+function harness(fetchImpl,seed=[],policyCheck=()=>{}) {
   let handler, saved=JSON.stringify(seed);
   const context=vm.createContext({
     require(name) {
+      if(name==='./production-policy')return {assertGenerationAllowed:policyCheck};
       if(name==='http')return {createServer(fn){handler=fn;return {listen(){}}}};
       if(name==='fs')return {readFileSync(){return saved},writeFileSync(path,value){saved=value},renameSync(){}};
       return require(name);
@@ -35,6 +36,12 @@ function harness(fetchImpl,seed=[]) {
 }
 const reply=data=>({ok:true,json:async()=>data});
 const job={id:'test',prompt:'A city at dawn',duration:5};
+test('project hold prevents new queue writes and submitting an older unsent job',async()=>{
+ let upstream=0;const request=harness(async()=>{upstream++;throw Error('unexpected upstream')},[{...job,projectId:'held'}],projectId=>{assert.equal(projectId,'held');throw Error('H3 项目处于准备阶段')});
+ const created=await request('POST','/jobs',{...job,id:'new',projectId:'held'});assert.equal(created.status,400);assert.match(created.data.error,/准备阶段/);
+ assert.equal((await request('GET','/jobs')).data.jobs.length,1);
+ const submitted=await request('POST','/jobs/test/comfy',{});assert.equal(submitted.status,502);assert.match(submitted.data.error,/准备阶段/);assert.equal(upstream,0);
+});
 test('lost persisted Comfy task becomes recoverable and a late output is found without resubmission',async()=>{
  let output=false,offline=false,posts=0;
  const request=harness(async(url,options={})=>{if(options.method==='POST')posts++;if(offline)throw Error('offline');return reply(url.endsWith('/queue')?{queue_running:[],queue_pending:[]}:output?{p1:{status:{completed:true,status_str:'success'},outputs:{save:{videos:[{filename:'late.mp4'}]}}}}:{})},[{...job,comfyPromptId:'p1',recovery:{status:'checking',since:Date.now()-40000,checks:1}}]);
