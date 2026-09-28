@@ -36,7 +36,9 @@ function Restart-StudioConnectorService {
     $previous = Get-StudioConnectorProcess
     Assert-StudioRenderingIdle
     if ($previous) {
-        if (@(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($previous.ProcessId)" -ErrorAction Stop).Count) { throw '连接服务有子任务，请完成后再重启。' }
+        $workers = @(Get-CimInstance Win32_Process -Filter "ParentProcessId=$($previous.ProcessId)" -ErrorAction Stop |
+            Where-Object { $_.Name -notin @('conhost.exe','OpenConsole.exe') })
+        if ($workers.Count) { throw '连接服务有子任务，请完成后再重启。' }
         $current = Get-StudioConnectorProcess
         if (-not $current -or $current.ProcessId -ne $previous.ProcessId -or $current.CreationDate -ne $previous.CreationDate) { throw '连接服务发生变化，请重新点击按钮。' }
         Assert-StudioRenderingIdle
