@@ -15,10 +15,11 @@ async function importAudio(dataUrl){
  const m=/^data:audio\/(?:wav|x-wav|wave|mpeg|mp3);base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl||'');if(!m)throw Error('请选择 WAV 或 MP3 音频');
  const bytes=Buffer.from(m[1],'base64');if(bytes.length<44||bytes.length>20*1024*1024)throw Error('声音素材须在20MB以内');
  const format=bytes.toString('ascii',0,4)==='RIFF'&&bytes.toString('ascii',8,12)==='WAVE'?'wav':bytes.toString('ascii',0,3)==='ID3'||bytes[0]===255&&(bytes[1]&224)===224?'mp3':null;if(!format)throw Error('声音文件格式与内容不符');
- const file='ams-audio-'+crypto.createHash('sha256').update(bytes).digest('hex')+'.wav';fs.mkdirSync(ROOT,{recursive:true});
+ // Version the conversion identity so old 16-bit assets keep their original URLs.
+ const file='ams-audio-'+crypto.createHash('sha256').update('pcm_s24le:48000:2:v2\0').update(bytes).digest('hex')+'.wav';fs.mkdirSync(ROOT,{recursive:true});
  const target=path.join(ROOT,file);if(fs.existsSync(target))return {file};
  const temp=path.join(ROOT,crypto.randomBytes(12).toString('hex')),input=temp+'.input',output=temp+'.wav';fs.writeFileSync(input,bytes);
- try{await new Promise((resolve,reject)=>execFile(FFMPEG,['-y','-hide_banner','-loglevel','error','-protocol_whitelist','file,pipe','-f',format,'-i',input,'-vn','-t','600','-ac','2','-ar','48000','-c:a','pcm_s16le',output],{windowsHide:true,timeout:60000},e=>e?reject(Error('声音文件无法解码，请换一份 WAV 或 MP3')):resolve()));
+ try{await new Promise((resolve,reject)=>execFile(FFMPEG,['-y','-hide_banner','-loglevel','error','-protocol_whitelist','file,pipe','-f',format,'-i',input,'-vn','-t','600','-ac','2','-ar','48000','-c:a','pcm_s24le',output],{windowsHide:true,timeout:60000},e=>e?reject(Error('声音文件无法解码，请换一份 WAV 或 MP3')):resolve()));
  if(fs.statSync(output).size<=44)throw Error('声音文件没有可用音轨');fs.renameSync(output,target);return {file};
  }finally{for(const f of [input,output])if(fs.existsSync(f))fs.unlinkSync(f)}
 }

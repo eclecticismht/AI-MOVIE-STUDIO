@@ -1,5 +1,5 @@
 // Non-destructive edit decisions, stored separately from generation/source records.
-const CUT={undo:new Map(),redo:new Map(),playing:false,last:0,raf:0,slots:[],ctx:null,master:null,music:null,musicNode:null,exportId:null,outputProfiles:null,outputProfilesProjectId:null,outputProfilesPromise:null};
+const CUT={undo:new Map(),redo:new Map(),playing:false,last:0,raf:0,slots:[],ctx:null,master:null,music:null,musicNode:null,exportId:null,outputProfiles:null,deliveryModes:['review'],outputProfilesProjectId:null,outputProfilesPromise:null};
 function cutKey(){return D.activeProjectId+'|'+cutBatch()}
 function cutBatch(){const p=activeProject();return p.storyboardBatchId||(D.storyboardBatches||[]).filter(b=>b.projectId===p.id).at(-1)?.id||''}
 function cutSettings(){return activeProject().timelineEdits?.[cutBatch()]||{order:[],clips:{},mix:{}}}
@@ -18,13 +18,27 @@ function cutPatch(id,changes){return cutSave(e=>{e.clips||={};e.clips[id]={...e.
 function cutUndo(redo=false){cutStop();const from=(redo?CUT.redo:CUT.undo).get(cutKey())||[],to=(redo?CUT.undo:CUT.redo).get(cutKey())||[];if(!from.length)return tlMessage('没有可以'+(redo?'重做':'撤销')+'的剪辑操作。');const prior=from.at(-1),current=structuredClone(cutSettings());if(cutSave(e=>{for(const key of Object.keys(e))delete e[key];Object.assign(e,prior)},false)){from.pop();to.push(current);(redo?CUT.undo:CUT.redo).set(cutKey(),to);TL.time=tlCurrent()?.start||0;tlMessage(redo?'已重做剪辑操作。':'已撤销剪辑操作。');tlRender()}}
 tlClips=function(){try{return TimelineEdit.build(cutShots(),cutSettings())}catch(e){tlMessage(e.message);return []}};
 const cutMountBase=tlMount;
-tlMount=function(){const section=cutMountBase();let bar=document.getElementById('cut-toolbar');if(!bar){bar=document.createElement('div');bar.id='cut-toolbar';bar.className='cut-toolbar';bar.innerHTML='<span>剪辑模式</span><button class="btn" onclick="cutUndo()">撤销剪辑</button><button class="btn" onclick="cutUndo(true)">重做剪辑</button><label>成片规格 <select id="cut-output-resolution" aria-label="成片输出分辨率" onchange="cutSetOutputResolution(this.value)"><option value="1280x720">1280 × 720 · HD</option><option value="1920x1080" disabled>1920 × 1080 · Full HD（上采样）</option><option value="2560x1440" disabled>2560 × 1440 · 2K QHD（常规缩放）</option><option value="3840x2160" disabled>3840 × 2160 · 4K UHD（上采样）</option></select></label><button class="btn gold" onclick="cutExport()">导出当前剪辑</button><span class="muted">拖动排序和裁切 · 当前导出为普通缩放，不等于AI超分</span><a id="cut-download" hidden download="timeline.mp4">下载剪辑版</a>';section.querySelector('.tl-timeline').before(bar)}const resolution=document.getElementById('cut-output-resolution');if(resolution){resolution.value=cutOutputResolution();void cutLoadOutputProfiles()}return section};
+tlMount=function(){const section=cutMountBase();let bar=document.getElementById('cut-toolbar');if(!bar){bar=document.createElement('div');bar.id='cut-toolbar';bar.className='cut-toolbar';bar.innerHTML='<span>剪辑模式</span><button class="btn" onclick="cutUndo()">撤销剪辑</button><button class="btn" onclick="cutUndo(true)">重做剪辑</button><label>成片规格 <select id="cut-output-resolution" aria-label="成片输出分辨率" onchange="cutSetOutputResolution(this.value)"><option value="1280x720">1280 × 720 · HD</option><option value="1920x1080" disabled>1920 × 1080 · Full HD（上采样）</option><option value="2560x1440" disabled>2560 × 1440 · 2K QHD（常规缩放）</option><option value="3840x2160" disabled>3840 × 2160 · 4K UHD（上采样）</option></select></label><label>导出文件 <select id="cut-delivery-mode" aria-label="导出文件类型" onchange="cutSetDeliveryMode(this.value)"><option value="review">播放版 MP4</option><option value="master_and_review" disabled>保留母版 + 播放版</option></select></label><button class="btn gold" onclick="cutExport()">导出当前剪辑</button><span class="muted">拖动排序和裁切 · 当前导出为普通缩放，不等于AI超分</span><a id="cut-download" hidden download="timeline.mp4">下载播放版</a><a id="cut-master-download" hidden download="master.mov">下载保留母版</a>';section.querySelector('.tl-timeline').before(bar)}const resolution=document.getElementById('cut-output-resolution');if(resolution){resolution.value=cutOutputResolution();document.getElementById('cut-delivery-mode').value=cutDeliveryMode();void cutLoadOutputProfiles()}return section};
+function cutDeliveryMode(){return activeProject().timelineDeliveryMode==='master_and_review'?'master_and_review':'review'}
+function cutSetDeliveryMode(value){
+  if(!['review','master_and_review'].includes(value)||!CUT.deliveryModes.includes(value))return tlMessage('当前导出服务尚未确认支持此文件类型。');
+  try{const data=JSON.parse(localStorage.getItem('aimovie_data')||'null'),project=data?.projects?.find(item=>item.id===D.activeProjectId);if(!project)throw Error('项目已变化，请刷新后重试。');project.timelineDeliveryMode=value;localStorage.setItem('aimovie_data',JSON.stringify(data));activeProject().timelineDeliveryMode=value;tlMessage(value==='master_and_review'?'将保存便于后续修订的母版与可播放的MP4；母版不叠加本次字幕，源片已有文字仍会保留。':'将保存可播放的MP4。')}catch(e){tlMessage('导出类型未保存：'+e.message)}
+}
 function cutOutputResolution(){const value=activeProject().timelineOutputResolution;return ['1280x720','1920x1080','2560x1440','3840x2160'].includes(value)?value:'1280x720'}
 function cutLoadOutputProfiles(force=false){
   const projectId=D.activeProjectId;if(!force&&CUT.outputProfilesProjectId===projectId){if(CUT.outputProfilesPromise)return CUT.outputProfilesPromise;if(CUT.outputProfiles)return Promise.resolve(CUT.outputProfiles)}
-  CUT.outputProfilesProjectId=projectId;CUT.outputProfiles=null;
-  CUT.outputProfilesPromise=fetch('/api/timeline-export?projectId='+encodeURIComponent(projectId),{signal:AbortSignal.timeout(10000)}).then(async response=>{const data=await response.json();if(!response.ok)throw Error(data.error||'读取成片规格失败');return data}).then(data=>{CUT.outputProfiles=Array.isArray(data.outputResolutions)?data.outputResolutions.filter(value=>['1280x720','1920x1080','2560x1440','3840x2160'].includes(value)):['1280x720'];return CUT.outputProfiles}).catch(()=>{CUT.outputProfiles=['1280x720'];return CUT.outputProfiles}).then(profiles=>{if(D.activeProjectId===projectId)for(const option of document.querySelectorAll('#cut-output-resolution option'))option.disabled=!profiles.includes(option.value);return profiles});
-  return CUT.outputProfilesPromise;
+  CUT.outputProfilesProjectId=projectId;CUT.outputProfiles=null;CUT.deliveryModes=['review'];
+  const pending=fetch('/api/timeline-export?projectId='+encodeURIComponent(projectId),{signal:AbortSignal.timeout(10000)})
+    .then(async response=>{const data=await response.json();if(!response.ok)throw Error(data.error||'读取成片规格失败');return data})
+    .catch(()=>({}))
+    .then(data=>{
+      const profiles=Array.isArray(data.outputResolutions)?data.outputResolutions.filter(value=>['1280x720','1920x1080','2560x1440','3840x2160'].includes(value)):['1280x720'];
+      if(CUT.outputProfilesPromise!==pending)return profiles;
+      CUT.outputProfiles=profiles;CUT.deliveryModes=Array.isArray(data.deliveryModes)?data.deliveryModes.filter(value=>['review','master_and_review'].includes(value)):['review'];
+      if(D.activeProjectId===projectId){for(const option of document.querySelectorAll('#cut-output-resolution option'))option.disabled=!profiles.includes(option.value);for(const option of document.querySelectorAll('#cut-delivery-mode option'))option.disabled=!CUT.deliveryModes.includes(option.value)}
+      return profiles;
+    });
+  CUT.outputProfilesPromise=pending;return pending;
 }
 function cutSetOutputResolution(value){
   if(!['1280x720','1920x1080','2560x1440','3840x2160'].includes(value))return tlMessage('成片分辨率无效，请重新选择。');
@@ -116,19 +130,21 @@ async function cutExport(){
   if(!tlCanLeave()||CUT.exportPreparing)return;cutStop();let clips=tlClips();if(!clips.length)return tlMessage('时间线没有镜头。');
   CUT.exportPreparing=true;
   try{
-    const profiles=await cutLoadOutputProfiles(true),outputResolution=cutOutputResolution();if(!profiles.includes(outputResolution))throw Error('当前导出服务尚未确认支持所选规格；未创建导出任务。');
-    const key=cutKey(),baseline=JSON.stringify(cutSettings()),durations=[];
+    const key=cutKey(),baseline=JSON.stringify(cutSettings()),outputResolution=cutOutputResolution(),selectedDelivery=cutDeliveryMode(),durations=[];
+    const profiles=await cutLoadOutputProfiles(true);if(key!==cutKey()||JSON.stringify(cutSettings())!==baseline||cutOutputResolution()!==outputResolution||cutDeliveryMode()!==selectedDelivery)throw Error('核对期间项目或导出设置发生变化，请重新导出。');
+    if(!profiles.includes(outputResolution))throw Error('当前导出服务尚未确认支持所选规格；未创建导出任务。');
+    if(!CUT.deliveryModes.includes(selectedDelivery))throw Error('当前服务尚未支持所选导出文件类型；未创建任务。');
     const sources=clips.map((c,i)=>{const url=tlMedia(c.shot)?.videoUrl||c.shot.videoUrl;if(!url)throw Error('第 '+(i+1)+' 镜缺少视频，请先生成或同步。');return url});
     tlMessage('正在核对所有源视频的实际时长…');
     for(const url of sources)durations.push(await cutProbeDuration(url));
     if(key!==cutKey()||JSON.stringify(cutSettings())!==baseline)throw Error('核对期间剪辑发生变化，请重新导出。');
     if(!cutSave(e=>{e.clips||={};clips.forEach((c,i)=>{const actual=durations[i];if(c.edit.trimIn>=actual-.1)throw Error('第 '+(i+1)+' 镜入点超过实际素材长度');e.clips[c.shot.id]={...e.clips[c.shot.id],sourceDuration:actual,trimOut:Math.min(c.edit.trimOut,actual)}})},false))return;
     clips=tlClips();tlTracks();
-    const plan={projectId:D.activeProjectId,title:activeProject().name+' · 剪辑版',outputResolution,aspectMode:activeProject().timelineAspectMode||'pad',colorMode:activeProject().timelineColorMode||'preserve',mix:TimelineEdit.mix(cutSettings().mix),clips:clips.map((c,i)=>({shotId:c.shot.id,url:sources[i],...c.edit,versionId:tlMedia(c.shot)?.id,filmRunId:tlMedia(c.shot)?.filmRunId,audioMode:c.shot.audioMode||'model',audioAsset:c.shot.audioAsset}))};
+    const plan={projectId:D.activeProjectId,title:activeProject().name+' · 剪辑版',outputResolution,deliveryMode:selectedDelivery,aspectMode:activeProject().timelineAspectMode||'pad',colorMode:activeProject().timelineColorMode||'preserve',mix:TimelineEdit.mix(cutSettings().mix),clips:clips.map((c,i)=>({shotId:c.shot.id,url:sources[i],...c.edit,versionId:tlMedia(c.shot)?.id,filmRunId:tlMedia(c.shot)?.filmRunId,audioMode:c.shot.audioMode||'model',audioAsset:c.shot.audioAsset}))};
     const r=await fetch('/api/timeline-export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(plan)}),out=await r.json();if(!r.ok)throw Error(out.error);CUT.exportId=out.id;sessionStorage.setItem('timeline-export:'+D.activeProjectId,out.id);tlMessage('剪辑版正在导出，使用现有视频，无需重新生成。');cutPollExport();
   }catch(e){tlMessage(e.message)}finally{CUT.exportPreparing=false}
 }
 function cutProbeDuration(url){return new Promise((resolve,reject)=>{const video=document.createElement('video');video.preload='metadata';const done=(error)=>{clearTimeout(timer);const duration=video.duration;video.onloadedmetadata=null;video.onerror=null;video.removeAttribute('src');video.load();error?reject(error):resolve(duration)},timer=setTimeout(()=>done(Error('素材时长读取超时，请检查渲染器连接')),15000);video.onloadedmetadata=()=>done(Number.isFinite(video.duration)?null:Error('素材时长无效'));video.onerror=()=>done(Error('素材无法读取'));video.src=cutProxy(url)})}
-async function cutPollExport(){const id=CUT.exportId||sessionStorage.getItem('timeline-export:'+D.activeProjectId);if(!id)return;try{const r=await fetch('/api/timeline-export/'+id),out=await r.json();if(!r.ok)throw Error(out.error);tlMessage(out.message);if(out.status==='complete'){const a=document.getElementById('cut-download');a.href=out.url;a.hidden=false;a.textContent='下载剪辑版 · '+out.duration.toFixed(2)+' 秒';CUT.exportId=null;return}if(out.status==='failed'){CUT.exportId=null;return}setTimeout(cutPollExport,2500)}catch(e){tlMessage('导出状态读取失败：'+e.message)}}
+async function cutPollExport(){const id=CUT.exportId||sessionStorage.getItem('timeline-export:'+D.activeProjectId);if(!id)return;try{const r=await fetch('/api/timeline-export/'+id),out=await r.json();if(!r.ok)throw Error(out.error);tlMessage(out.message);if(out.status==='complete'){const a=document.getElementById('cut-download');a.href=out.url;a.hidden=false;a.textContent='下载播放版 · '+out.duration.toFixed(2)+' 秒';const master=document.getElementById('cut-master-download');if(master){master.hidden=!out.masterUrl;if(out.masterUrl)master.href=out.masterUrl}CUT.exportId=null;return}if(out.status==='failed'){CUT.exportId=null;return}setTimeout(cutPollExport,2500)}catch(e){tlMessage('导出状态读取失败：'+e.message)}}
 const cutToolsBase=tlTools;
 tlTools=function(mode){cutStop();cutToolsBase(mode);if(mode==='edit')tlMessage('这里按原始分镜制作素材；要应用时间线裁切、转场和混音，请点击“导出当前剪辑”。')};
