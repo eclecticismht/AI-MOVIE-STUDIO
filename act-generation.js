@@ -23,7 +23,7 @@
     if(state.parts[i])continue;io.notice(`3 / 5 · 生成本场场景与镜头 ${i+1}/${parts.length}`);
     let result,resplit=false,repair=state.repairs?.[i];
     for(let attempt=0;attempt<3;attempt++){
-     try{result=await io.request('/api/storyboard',{screenplay:parts[i].text,sourceStory:story,storyUnderstanding:state.understanding,model,assets:state.prepared.assets,timing:{mode:'auto'},repair,notes:(state.storyboardFeedback?'上次全场复核必须修正：'+state.storyboardFeedback+'\n':'')+'只生成本段镜头。口头对白按每秒3字加1秒分配时长，每镜4至15秒，长对白按原文拆镜。原文指定的一镜到底、连续运镜与总时长必须保留；同一连续动作的画面、声音和片名说明不能逐段拆成重复镜头。片名使用后期资产，不交给视频模型生成文字。sourceStory只供核对原文，不属于本段生成范围。只生成screenplay当前片段中的动作和对白。'+story.split('\n').filter(line=>/一镜到底|连续运镜|不切镜|横屏|fps|分辨率|[0-9]+秒镜头/.test(line)).join('\n')});break}catch(e){
+     try{result=await io.request('/api/storyboard',{screenplay:parts[i].text,segmentContext:{index:i,segments:parts.map(part=>part.text)},sourceStory:story,storyUnderstanding:state.understanding,model,assets:state.prepared.assets,timing:{mode:'auto'},repair,notes:(state.storyboardFeedback?'上次全场复核必须修正：'+state.storyboardFeedback+'\n':'')+'只生成本段镜头。口头对白按每秒3字加1秒分配时长，每镜4至15秒，长对白按原文拆镜。原文指定的一镜到底、连续运镜与总时长必须保留；同一连续动作的画面、声音和片名说明不能逐段拆成重复镜头。片名使用后期资产，不交给视频模型生成文字。sourceStory只供核对原文，不属于本段生成范围。只生成screenplay当前片段中的动作和对白。'+story.split('\n').filter(line=>/一镜到底|连续运镜|不切镜|横屏|fps|分辨率|[0-9]+秒镜头/.test(line)).join('\n')});break}catch(e){
       if(e.code==='MODEL_OUTPUT_LIMIT'){
        const smaller=/一镜到底|不切镜/.test(story)?[]:segments.bisect(parts[i]);
        state.outputLimits=[...(state.outputLimits||[]),{partIndex:i,characters:parts[i].text.length,at:new Date().toISOString()}].slice(-20);
