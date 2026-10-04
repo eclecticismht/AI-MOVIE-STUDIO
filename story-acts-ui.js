@@ -6,6 +6,7 @@ function storyActsContext(){
  return {p,script,batch,key,shots,saved,acts:StoryActs.normalize(acts,shots)};
 }
 function storyActsCommit(context,acts,backup=false,action=''){
+ if(typeof workspaceSave!=='undefined'&&workspaceSave.conflict)throw Error('工作区版本冲突，未新建、删除或覆盖场次。请点页面顶部“恢复场次保存”，先保留并核对原文草稿。');
  const {p,key,saved}=context;
  const stored=JSON.parse(localStorage.getItem('aimovie_data')||'null'),latest=stored?.projects.find(x=>x.id===p.id);
  if(!latest||JSON.stringify(latest.storyActs?.[key])!==JSON.stringify(saved))throw Error('场次已在其他页面修改，请刷新后再试。');

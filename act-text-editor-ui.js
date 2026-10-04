@@ -14,7 +14,7 @@
  function identity(el){return {projectId:el.dataset.actTextProject,scope:el.dataset.actTextScope,actId:el.dataset.act,field:el.dataset.actTextField}}
  function inputKey(el){return key(identity(el))}
  function fields(){return [...document.querySelectorAll(selector)]}
- function show(k,text){for(const el of fields())if(inputKey(el)===k){const row=el.parentElement.querySelector('[data-act-text-status]');if(row&&row.textContent!==text)row.textContent=text;row?.classList.toggle('warn',errors.has(k));}}
+ function show(k,text){for(const el of fields())if(inputKey(el)===k){const row=el.parentElement.querySelector('[data-act-text-status]');if(row&&row.textContent!==text)row.textContent=text;row?.classList.toggle('warn',errors.has(k));const needsRecovery=errors.has(k)&&typeof workspaceSave!=='undefined'&&workspaceSave.conflict;let recovery=el.parentElement.querySelector('[data-act-text-recovery]');if(needsRecovery&&!recovery&&typeof workspaceRecoveryLink==='function'){recovery=workspaceRecoveryLink('核对并恢复保存（保留草稿）');recovery.dataset.actTextRecovery='';row?.parentElement.append(recovery);}if(recovery)recovery.hidden=!needsRecovery;}}
  function persistDraft(d){storage.setItem(diskKey(key(d)),JSON.stringify(d))}
  function schedule(){clearTimeout(timer);timer=setTimeout(()=>void flush(),900)}
  function sourceOf(info){return D.projects.find(p=>p.id===info.projectId)?.storyActs?.[info.scope]?.acts?.find(a=>a.id===info.actId)}
@@ -50,7 +50,7 @@
     const snapshot=keys.map(k=>structuredClone(drafts.get(k)));
     try{
      if(snapshot.some(d=>storyFlowRuns.has(d.projectId)||actGenerationRuns.has(d.projectId)))throw Error('本项目正在创作，请完成后再保存场次；输入草稿仍保留。');
-     if(typeof workspaceSave!=='undefined'&&workspaceSave.conflict)throw Error('工作区存在版本冲突，未覆盖原文；请先核对保存提示。');
+     if(typeof workspaceSave!=='undefined'&&workspaceSave.conflict)throw Error('浏览器与磁盘版本不同，输入草稿已保留；请点“核对并恢复保存”，不要重新建场或用旧页覆盖磁盘。');
      for(const k of keys)show(k,'正在后台保存原文，仍可继续输入…');
      await writeBatch(snapshot);
      for(const d of snapshot){

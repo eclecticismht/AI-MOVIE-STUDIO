@@ -6,7 +6,8 @@ function pendingQuality(run){
 function holdBeforeAssembly(run){
  const pending=pendingQuality(run);if(!pending.length)return false;
  Quality.holdForReview(run,pending[0].index-1,pending[0].result);
- run.error=`全部镜头素材已生成，${pending.length} 镜声音检查待处理；解决后才能合成成片。`;
+ const completed=run.shots.filter(shot=>shot.ready).length,total=run.shots.length;
+ run.error=completed===total?`全部镜头素材已生成，${pending.length} 镜声音检查待处理；解决后才能合成成片。`:`已生成 ${completed}/${total} 镜，其中 ${pending.length} 镜声音检查待处理；其余 ${total-completed} 镜尚未生成，当前不是完整成片。`;
  return true;
 }
 function visiblePendingQuality(run){
