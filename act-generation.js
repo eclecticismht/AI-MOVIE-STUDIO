@@ -17,13 +17,22 @@
    }
   }
   for(let round=0;!state.shots&&round<3;round++){
-   const parts=io.split(state.screenplay.content);state.parts||=[];
+   const segments=typeof module!=='undefined'&&module.exports?require('./storyboard-segments'):root.StoryboardSegments;
+   const parts=state.segments||io.split(state.screenplay.content);state.segments=parts;state.parts||=[];
    for(let i=0;i<parts.length;i++){
     if(state.parts[i])continue;io.notice(`3 / 5 · 生成本场场景与镜头 ${i+1}/${parts.length}`);
-    let result,repair=state.repairs?.[i];
+    let result,resplit=false,repair=state.repairs?.[i];
     for(let attempt=0;attempt<3;attempt++){
-     try{result=await io.request('/api/storyboard',{screenplay:parts[i].text,sourceStory:story,storyUnderstanding:state.understanding,model,assets:state.prepared.assets,timing:{mode:'auto'},repair,notes:(state.storyboardFeedback?'上次全场复核必须修正：'+state.storyboardFeedback+'\n':'')+'只生成本段镜头。口头对白按每秒3字加1秒分配时长，每镜4至15秒，长对白按原文拆镜。原文指定的一镜到底、连续运镜与总时长必须保留；同一连续动作的画面、声音和片名说明不能逐段拆成重复镜头。片名使用后期资产，不交给视频模型生成文字。以下是当前场次原始制作要求，须与剧本一起遵守：\n'+story});break}catch(e){if(!e.repair)throw e;repair=e.repair;state.repairs||={};state.repairs[i]=repair;await checkpoint();if(attempt===2)throw e}
+     try{result=await io.request('/api/storyboard',{screenplay:parts[i].text,sourceStory:story,storyUnderstanding:state.understanding,model,assets:state.prepared.assets,timing:{mode:'auto'},repair,notes:(state.storyboardFeedback?'上次全场复核必须修正：'+state.storyboardFeedback+'\n':'')+'只生成本段镜头。口头对白按每秒3字加1秒分配时长，每镜4至15秒，长对白按原文拆镜。原文指定的一镜到底、连续运镜与总时长必须保留；同一连续动作的画面、声音和片名说明不能逐段拆成重复镜头。片名使用后期资产，不交给视频模型生成文字。sourceStory只供核对原文，不属于本段生成范围。只生成screenplay当前片段中的动作和对白。'+story.split('\n').filter(line=>/一镜到底|连续运镜|不切镜|横屏|fps|分辨率|[0-9]+秒镜头/.test(line)).join('\n')});break}catch(e){
+      if(e.code==='MODEL_OUTPUT_LIMIT'){
+       const smaller=/一镜到底|不切镜/.test(story)?[]:segments.bisect(parts[i]);
+       state.outputLimits=[...(state.outputLimits||[]),{partIndex:i,characters:parts[i].text.length,at:new Date().toISOString()}].slice(-20);
+       if(smaller.length){parts.splice(i,1,...smaller);state.parts.splice(i,1,...smaller.map(()=>null));delete state.repairs;io.notice('本段输出过长，已自动拆为较短片段；此前分镜保持不变');await checkpoint();resplit=true;break}
+       await checkpoint();throw e;
+      }
+      if(!e.repair)throw e;repair=e.repair;state.repairs||={};state.repairs[i]=repair;await checkpoint();if(attempt===2)throw e}
     }
+    if(resplit){i--;continue;}
     if(!result?.shots?.length||result.shots[0].continuePrevious)throw Error('本场分镜为空或首镜错误承接其他场次');
     state.parts[i]=result.shots;if(state.repairs)delete state.repairs[i];await checkpoint();
    }
@@ -32,7 +41,7 @@
     state.review=(await checked('/api/screenplay/coverage',{story,model,storyUnderstanding:state.understanding,shots:state.parts.flat()})).review;await checkpoint();
     if(state.review?.status!=='checked'){
      state.storyboardFeedback=(state.review?.issues||['未返回完整复核结果']).join('\n');
-     state.storyboardAttempts=[...(state.storyboardAttempts||[]),{parts:state.parts,review:state.review}].slice(-3);state.parts=[];delete state.repairs;await checkpoint();
+     state.storyboardAttempts=[...(state.storyboardAttempts||[]),{parts:state.parts,review:state.review}].slice(-3);state.parts=[];delete state.repairs;delete state.segments;await checkpoint();
      if(round===2)throw Error('故事画面仍需修正：'+state.storyboardFeedback);
      // Repair omissions at their source too; a storyboard cannot quote facts
      // that the adapted screenplay accidentally dropped.

@@ -80,6 +80,7 @@ function shotReferenceAssets(shot){
   return result;
 }
 function requireShotReferenceImages(shot){
+  DialogueContract.checkCharacterBindings(shot,(D.characters||[]).filter(c=>c.projectId===shot.projectId));
   if(shot.renderMode==='screen'){
     if(shot.firstFrameUrl||shot.continueFromShotId||shotDialogueEvents(shot).some(e=>e.type==='speech'))throw Error('屏幕资产展示不能含口头对白、首帧或尾帧承接');
     if(!(shot.propIds||[]).includes(shot.screenAssetId))throw Error('请选择本镜已引用的屏幕道具');

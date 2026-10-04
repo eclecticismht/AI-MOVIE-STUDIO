@@ -26,6 +26,20 @@
       return {type:'speech',speakerId:speaker?.id||'narrator',speakerName:name,delivery:isNarration(name)?'offscreen':delivery,text};
     });
   }
+  function checkCharacterBindings(shot,characters=[]){
+    if(!Array.isArray(shot.characterIds))return;
+    const selected=new Set(shot.characterIds),events=parseDialogue(shot.dialogue||'',characters);
+    const missing=events.filter(e=>e.type==='speech'&&e.delivery==='onscreen'&&!selected.has(e.speakerId)).map(e=>e.speakerName);
+    const names=characters.filter(c=>c.name).slice().sort((a,b)=>b.name.length-a.name.length);
+    for(let part of String(shot.characters??shot.char??'').split(/[、，,;；\n]/)){
+      for(const c of names){const at=part.indexOf(c.name);if(at<0)continue;const tail=part.slice(at+c.name.length);
+        const offscreen=/^(?:[（(][^）)]*(?:画外|声音|仅提及|电话)[^）)]*[）)]|的声音)/.test(tail)||shot.assetStates?.[c.id]?.presence==='offscreen';
+        if(!offscreen&&!selected.has(c.id)&&c.type!=='仅提及')missing.push(c.name);
+        part=part.slice(0,at)+' '.repeat(c.name.length)+tail;
+      }
+    }
+    if(missing.length)throw Error('画内人物未绑定独立角色资产：'+[...new Set(missing)].join('、')+'。请补齐角色引用，画外人物应明确标为画外。');
+  }
   function validateEvents(events){
     if(!Array.isArray(events)||events.length>40)throw Error('对白结构无效。');
     return events.map(e=>{
@@ -34,7 +48,20 @@
       return e.type==='speech'?{type:e.type,speakerId:e.speakerId,speakerName:e.speakerName,delivery:e.delivery,text:e.text.trim()}:{type:e.type,text:e.text.trim()};
     });
   }
-  function checkSource(events,source){
+  // Only explicit speaking labels authorize direct speech independently of an
+  // AI fact summary. Longest aliases win; thoughts and written messages never do.
+  function sourceSpeaker(label,characters=[]){
+    const bare=String(label).replace(/[（(][^）)]*[）)]/g,'').split(/[。！？!?]\s*/).at(-1).trim();
+    if(isNarration(bare)||bare==='画外声音')return {id:'narrator',name:bare};
+    const names=characters.flatMap(c=>[c.name,...(c.aliases||[])].filter(Boolean).map(name=>({c,name}))).sort((a,b)=>b.name.length-a.name.length);
+    for(const {c,name} of names){if(!bare.startsWith(name))continue;const suffix=bare.slice(name.length).trim();
+      if(!suffix||/^(?:的声音|喘着气|(?:笑着|低声|轻声|大声|高声|小声|在身后|在门口|仰头|回头|忍不住|故意|轻轻|缓缓)*(?:笑道|说道|说|问道|问|回答|答道|答|喊道|喊|应道|应))$/.test(suffix))return {id:c.id,name:c.name};
+    }return null;
+  }
+  function sourceSpeech(source,characters=[]){
+    return String(source||'').split(/\n/).flatMap(line=>{const m=/^\s*([^:：]{1,50})[:：]\s*(.+)$/.exec(line);if(!m)return [];const speaker=sourceSpeaker(m[1],characters);return speaker?[{speakerId:speaker.id,speakerName:speaker.name,text:m[2].trim(),label:m[1].trim()}]:[]});
+  }
+  function checkSource(events,source,characters=[]){
     if(!source)return;
     for(const e of events)if(e.type==='sound'){
       const spoken=String(source).split(/\n/).some(line=>{
@@ -50,10 +77,14 @@
       // Verify explicit screenplay speaker labels when present; do not infer a
       // speaker from prose narration or a voice heard through another character's phone.
       const lines=String(source).split(/\n/);
-      const labelled=lines.find(line=>clean(line).includes(clean(e.text))&&/^\s*[^:：]{1,30}[:：]/.test(line));
-      if(labelled){const who=labelled.split(/[:：]/)[0].trim().replace(/[（(][^）)]*[）)]/g,'').trim();
-        if(/打字|屏幕文字|文字消息/.test(who))throw Error('剧本中的文字消息被写成口头对白，请改为“屏幕文字：原文”。');
-        if(who!==e.speakerName&&who!=='画外声音'&&!(isNarration(who)&&isNarration(e.speakerName)))throw Error('台词说话人物与剧本不符：原文为“'+who+'”，分镜为“'+e.speakerName+'”。');
+      const labelled=lines.filter(line=>clean(line).includes(clean(e.text))&&/^\s*[^:：]{1,50}[:：]/.test(line));
+      if(labelled.length){
+        const known=characters.length?characters:events.filter(x=>x.type==='speech').map(x=>({id:x.speakerId,name:x.speakerName}));
+        const expected=sourceSpeaker(e.speakerName,known)||{id:e.speakerId,name:e.speakerName};
+        const who=labelled.map(line=>line.split(/[:：]/)[0].trim());
+        const compatible=who.some(label=>{const p=sourceSpeaker(label,known);return p&&(p.id===expected.id||p.name===expected.name||p.name==='画外声音'||(isNarration(p.name)&&isNarration(expected.name)))});
+        if(!compatible){if(who.some(label=>/打字|屏幕文字|文字消息/.test(label)))throw Error('剧本中的文字消息被写成口头对白，请改为“屏幕文字：原文”。');
+          throw Error('台词说话人物与剧本不符：原文为“'+who[0]+'”，分镜为“'+e.speakerName+'”。');}
       }
     }
   }
@@ -86,6 +117,6 @@
     const instruction='\n\nSpoken performance (authoritative):\n'+extra+'\nOn-screen text messages are silent and must never be spoken. Do not draw dialogue subtitles, captions, speaker labels or karaoke text onto the video; dialogue is audio only. Any explicitly requested device-screen content stays inside that device.\n\n';
     return boundary<0?prompt+instruction:prompt.slice(0,boundary)+instruction+prompt.slice(boundary);
   }
-  const api={parseDialogue,validateEvents,checkSource,bindDialogue,repairEvents,eventText};
+  const api={parseDialogue,validateEvents,checkSource,bindDialogue,repairEvents,eventText,sourceSpeaker,sourceSpeech,checkCharacterBindings};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.DialogueContract=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

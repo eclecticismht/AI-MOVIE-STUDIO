@@ -41,9 +41,11 @@ beats按呈现顺序排列，覆盖全部明确行动和转场，每次失败与
  }
  function checkSpeech(events,understanding,story){
   const allowed=understanding.facts.filter(f=>f.delivery==='speech');
-  for(const e of events)if(e.type==='speech'&&!allowed.some(f=>clean(f.evidence).includes(clean(e.text))))throw Error('原文未明确让人物说出这句话：'+e.text+'。请删除新增对白，叙述、消息与心理活动不能变成口头台词。');
   const dialogue=typeof module!=='undefined'&&module.exports?require('./dialogue-contract'):root.DialogueContract;
-  dialogue.checkSource(events,story);
+  const explicit=dialogue.sourceSpeech(story,understanding.characters||[]);
+  const spokenClean=s=>clean(s).replace(/[“”「」『』]/g,'');
+  for(const e of events)if(e.type==='speech'&&!allowed.some(f=>spokenClean(f.evidence).includes(spokenClean(e.text)))&&!explicit.some(line=>spokenClean(line.text).includes(spokenClean(e.text))))throw Error('原文未明确让人物说出这句话：'+e.text+'。请删除新增对白，叙述、消息与心理活动不能变成口头台词。');
+  dialogue.checkSource(events,story,understanding.characters||[]);
  }
  function checkScreenplay(content,understanding,story,characters=understanding.characters){
   const dialogue=typeof module!=='undefined'&&module.exports?require('./dialogue-contract'):root.DialogueContract;

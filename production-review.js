@@ -3,7 +3,7 @@
  const image=value=>String(value||'').startsWith('data:')?'[embedded image; available in project]':value||'';
  function audit(doc){
   const normalize=s=>String(s||'').normalize('NFKC').replace(/[\s\p{P}\p{S}]/gu,'');
-  const story=String(doc.project.storyText||''),quoted=[...story.matchAll(/["“「]([^"”」]+)["”」]/g)].map(m=>m[1]).join('');
+  const story=String(doc.batch?.sourceStory??doc.project.storyText??''),quoted=[...story.matchAll(/["“「]([^"”」]+)["”」]/g)].map(m=>m[1]).join('');
   const issues=[],characters=doc.assets.characters||[];
   const dialogue=typeof module!=='undefined'&&module.exports?require('./dialogue-contract'):root.DialogueContract;
   doc.shots.forEach((shot,i)=>{
@@ -17,7 +17,7 @@
  }
  function snapshot(project,batch,shots,assets,validation){
   if(!project||!batch||batch.projectId!==project.id||!shots.length||shots.some(s=>s.projectId!==project.id||s.storyboardBatchId!==batch.id))throw Error('请选择同一项目的单一分镜批次');
-  return {version:1,project:pick(project,['id','name','storyText','screenplayNotes','h3Width','h3Height']),batch:pick(batch,['id','sourceScriptId','sourceTitle','sourceContent','notes','timing']),shots:shots.map(s=>({...pick(s,['id','sequence','actionReviewRequired','sourceExcerpt','script','visual','desc','camera','char','scene','prompt','filmPrompt','filmPromptVersion','filmPromptSource','firstFrameIntent','dialogue','dur','characterIds','sceneIds','propIds','renderMode','screenAssetId','screenImagePercent','screenSource','audioMode','audioAsset','performanceAudio','continueFromShotId','firstFrameSpeakerPosition']),firstFrameUrl:image(s.firstFrameUrl),assetStates:Object.fromEntries(Object.entries(s.assetStates||{}).map(([id,state])=>[id,pick(state,['description','imageUrl','screenText','screenEffect','presence'])]))})),assets:Object.fromEntries(['characters','scenes','props'].map(kind=>[kind,(assets[kind]||[]).filter(a=>a.projectId===project.id).map(a=>({...pick(a,['id','name','type','notes','prompt']),imageUrl:image(a.imageUrl)}))])),validation};
+  return {version:1,project:pick(project,['id','name','storyText','screenplayNotes','h3Width','h3Height']),batch:pick(batch,['id','sourceScriptId','sourceTitle','sourceContent','sourceStory','notes','timing']),shots:shots.map(s=>({...pick(s,['id','sequence','actionReviewRequired','sourceExcerpt','script','visual','desc','camera','char','scene','prompt','filmPrompt','filmPromptVersion','filmPromptSource','firstFrameIntent','dialogue','dur','characterIds','sceneIds','propIds','renderMode','screenAssetId','screenImagePercent','screenSource','audioMode','audioAsset','performanceAudio','continueFromShotId','firstFrameSpeakerPosition']),firstFrameUrl:image(s.firstFrameUrl),assetStates:Object.fromEntries(Object.entries(s.assetStates||{}).map(([id,state])=>[id,pick(state,['description','imageUrl','screenText','screenEffect','presence'])]))})),assets:Object.fromEntries(['characters','scenes','props'].map(kind=>[kind,(assets[kind]||[]).filter(a=>a.projectId===project.id).map(a=>({...pick(a,['id','name','type','notes','prompt']),imageUrl:image(a.imageUrl)}))])),validation};
  }
  if(typeof module!=='undefined'&&module.exports)module.exports={snapshot,audit};else{
   root.ProductionReview={snapshot,audit};

@@ -15,14 +15,16 @@ async function pollLocalFirstFrame(projectId,shotId,id){
  catch(e){const panel=document.getElementById('localFrameStatus');if(panel?.dataset.shot===shotId&&panel.dataset.project===projectId)panel.textContent='状态读取失败：'+e.message+'。重新打开此镜头可继续查看。';}
  finally{localFramePolls.delete(id)}
 }
+function localFrameReferenceOptions(){return document.getElementById('localFrameReferenceMode')?.value==='adapt'?{referencePolicy:'adapt',referenceStrength:1}:{referencePolicy:'strict',referenceStrength:4}}
 async function generateLocalFirstFrame(){
+ const referenceOptions=localFrameReferenceOptions();
  const projectId=D.activeProjectId,id=editingShotId;
  if(!saveStoryboardShot(id))return;
  editingShotId=id;renderShots2();const shot=D.shots.find(s=>s.id===id&&s.projectId===projectId),panel=document.getElementById('localFrameStatus');
  try{if(shot.continueFromShotId)throw Error('承接镜头使用前镜尾帧，无需单独生成首帧。');if(shot.renderMode==='black')throw Error('纯黑镜头无需生成首帧。');panel.textContent='正在准备本镜资产…';
  const assets=shotReferenceAssets(shot);if(assets.some(a=>!a.imageUrl))throw Error('请先补齐本镜所有资产图片。');
  const snapshot=localFrameSnapshot(shot),references=await uploadShotImages(assets);
- const response=await fetch('/api/first-frames',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId,shotId:id,references,prompt:localFramePrompt(shot),...localFrameSize(shot)})});const job=await response.json();if(!response.ok)throw Error(job.error);
+ const response=await fetch('/api/first-frames',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId,shotId:id,references,prompt:localFramePrompt(shot),...localFrameSize(shot),...referenceOptions})});const job=await response.json();if(!response.ok)throw Error(job.error);
  const current=D.shots.find(s=>s.id===id&&s.projectId===projectId);if(!current)return;current.localFrameJobId=job.id;current.localFrameSource=snapshot;current.localFrameResult=null;localStorage.setItem('aimovie_data',JSON.stringify(D));showLocalFrameJob(current,job);pollLocalFirstFrame(projectId,id,job.id);
  }catch(e){panel.textContent=e.message}
 }
@@ -40,6 +42,6 @@ const renderBeforeLocalFrames=renderShots2;
 renderShots2=function(){renderBeforeLocalFrames();const shot=D.shots.find(s=>s.id===editingShotId&&s.projectId===D.activeProjectId),field=document.getElementById('board_firstFrameUrl');if(!shot||!field)return;
  field.insertAdjacentHTML('afterend',`<input type="hidden" id="board_firstFrameProvenance" value="${esc(JSON.stringify(shot.firstFrameProvenance||null))}">`);
  field.addEventListener('input',()=>{document.getElementById('board_firstFrameSpeakerPosition').value='';document.getElementById('board_firstFrameProvenance').value='null';});
- field.closest('label').insertAdjacentHTML('beforebegin',`<div><label>首帧起始状态（可选）<textarea id="board_firstFrameIntent" placeholder="默认画动作发生前。需调整时描述人物位置、姿势和物品归属，后续动作仍由视频呈现。">${esc(shot.firstFrameIntent||'')}</textarea></label><button class="btn" type="button" onclick="generateLocalFirstFrame()">保存分镜并用本镜资产生成首帧（本地）</button><p class="muted">使用本镜角色、场景、道具图片生成候选画面。多资产分轮处理，需检查后采用；已有首帧保留。</p><div id="localFrameStatus" data-shot="${esc(shot.id)}" data-project="${esc(shot.projectId)}"></div></div>`);
+ field.closest('label').insertAdjacentHTML('beforebegin',`<div><label>首帧起始状态（可选）<textarea id="board_firstFrameIntent" placeholder="默认画动作发生前。需调整时描述人物位置、姿势和物品归属，后续动作仍由视频呈现。">${esc(shot.firstFrameIntent||'')}</textarea></label><details><summary>参考方式（默认保持角色与场景）</summary><label>本次首帧参考<select id="localFrameReferenceMode"><option value="strict">保持参考造型与空间（默认）</option><option value="adapt">按本镜明确要求改变服装、年龄或视角</option></select></label><p class="muted">允许变化时降低参考强度；须在上方写明改变内容。可能影响人物一致性，生成后检查再采用，不自动替换已有首帧。</p></details><button class="btn" type="button" onclick="generateLocalFirstFrame()">保存分镜并用本镜资产生成首帧（本地）</button><p class="muted">使用本镜角色、场景、道具图片生成候选画面。多资产分轮处理，需检查后采用；已有首帧保留。</p><div id="localFrameStatus" data-shot="${esc(shot.id)}" data-project="${esc(shot.projectId)}"></div></div>`);
  if(shot.localFrameResult)showLocalFrameJob(shot,shot.localFrameResult);else if(shot.localFrameJobId)pollLocalFirstFrame(shot.projectId,shot.id,shot.localFrameJobId);
 };
