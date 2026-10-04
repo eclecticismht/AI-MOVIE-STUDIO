@@ -3,7 +3,7 @@
   'use strict';
   const M = globalThis.StudioWorkbenchModel;
   if (!M || typeof D === 'undefined') throw Error('新版工作台依赖未加载，请刷新页面。');
-  const VERSION = '0.3 · 20261004', PREFS = 'ams_workbench_view_v1';
+  const VERSION = '0.3.1 · 20261004', PREFS = 'ams_workbench_view_v1';
   let preferences = {};
   try { preferences = JSON.parse(localStorage.getItem(PREFS) || '{}'); } catch {}
   const state = { route: 'studio', bin: 'shots', query: '', versionBusy: false, assetDirty: false, previousFocus: null };
