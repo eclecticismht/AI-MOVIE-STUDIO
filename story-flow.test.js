@@ -9,6 +9,12 @@ test('revisited places remain separate scene blocks and manual prompts are prese
   const shots=[{scene:'街道',prompt:'manual'},{scene:'餐馆',prompt:''},{scene:'街道',renderMode:'black'}];
   assert.equal(model.groups(shots).length,3);assert.deepEqual(model.pending(shots),[shots[1]]);
 });
+test('asset-bound shots show scene names without altering shot sources or using another project assets',()=>{
+  const shots=[{id:'1',projectId:'p',sceneIds:['street']},{id:'2',projectId:'p',sceneIds:['door']},{id:'3',projectId:'p',sceneIds:['street']},{id:'4',projectId:'p',sceneIds:['foreign']}];
+  const before=JSON.stringify(shots),scenes=[{id:'street',projectId:'p',name:'天河街头'},{id:'door',projectId:'p',name:'1606室门口'},{id:'foreign',projectId:'other',name:'其他项目场景'}];
+  assert.deepEqual(model.groups(shots,'',scenes).map(g=>g.title),['天河街头','1606室门口','天河街头','未命名场景']);assert.equal(JSON.stringify(shots),before);
+  assert.equal(model.groups([{projectId:'p',scene:'手工场景',sceneIds:['street']}],'',scenes)[0].title,'手工场景');
+});
 function harness(){
   const p={id:'p',name:'test',storyText:'故事'},D={activeProjectId:'p',projects:[p],scripts:[],shots:[],storyboardBatches:[]},calls={script:0,board:0,h3:0};
   const c={D,StoryFlowModel:model,ShotPrompt,activeProject:()=>p,renderScripts:()=>{},document:{getElementById:()=>null},localStorage:{setItem:()=>{}},screenplayRequests:new Set(),storyboardRequests:new Set(),screenplayMessages:new Map(),storyboardMessages:new Map(),screenplayApiKey:'',compileH3Prompt:()=>'',AbortSignal,console};

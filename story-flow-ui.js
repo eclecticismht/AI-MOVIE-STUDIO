@@ -45,7 +45,7 @@ async function storyFlowStart(resume=true){
     await storyFlowPrompts(p,StoryFlowModel.pending(shots),run);
     storyFlowCheckpoint(p,run);if(script.content!==batch.sourceContent)throw Error('剧本已修改，本批次仍基于修改前的版本。继续时将新建分镜批次。');
     storyFlowCommit(p,{storyboardBatchId:batch.id,storyFlow:{...state,stage:'done'}});
-    storyFlowNotice(p,`已完成：${StoryFlowModel.groups(shots,batch.sourceContent).length} 个场景、${shots.length} 个镜头。可继续修改内容或进入时间线。`);
+    storyFlowNotice(p,`已完成：${StoryFlowModel.groups(shots,batch.sourceContent,D.scenes).length} 个场景、${shots.length} 个镜头。可继续修改内容或进入时间线。`);
   }catch(error){storyFlowNotice(p,error.message+' 已完成内容会保留。')}
   finally{storyFlowRuns.delete(p.id);if(D.activeProjectId===p.id)renderScripts()}
 }
@@ -68,7 +68,7 @@ function storyFlowEditShot(id,field,value){const s=D.shots.find(x=>x.id===id&&x.
   const patch={[field]:value,...(field==='visual'?{desc:value}:{})};try{localStorage.setItem('aimovie_data',JSON.stringify({...D,shots:D.shots.map(x=>x===s?{...s,...patch}:x)}));Object.assign(s,patch);storyFlowNotice(activeProject(),field==='prompt'?'H3 提示词已保存。':'镜头修改已保存。若画面或动作改变，可点击“重写本镜 H3”更新提示词。')}catch{storyFlowNotice(activeProject(),'镜头保存失败，请复制当前编辑内容备份。')}}
 function storyFlowOutline(){const p=activeProject(),script=currentScreenplay(),batches=(D.storyboardBatches||[]).filter(b=>b.projectId===p.id&&b.sourceScriptId===script?.id),batch=batches.find(b=>b.id===p.storyboardBatchId)||batches.at(-1);
   if(!batch)return '<div class="card empty">自动创作完成后，场景一、二、三及各场景内的镜头将在这里展开。</div>';
-  const shots=D.shots.filter(s=>s.projectId===p.id&&s.storyboardBatchId===batch.id).sort((a,b)=>(a.sequence||0)-(b.sequence||0)),groups=StoryFlowModel.groups(shots,batch.sourceContent);
+  const shots=D.shots.filter(s=>s.projectId===p.id&&s.storyboardBatchId===batch.id).sort((a,b)=>(a.sequence||0)-(b.sequence||0)),groups=StoryFlowModel.groups(shots,batch.sourceContent,D.scenes);
   return `<section class="story-outline"><h2>场景与镜头 · ${groups.length} 场 / ${shots.length} 镜</h2><p class="muted">${batch.sourceContent!==script?.content?'剧本已有修改：下方保留旧版分镜，继续自动创作会新建批次。':'按剧本叙事顺序排列；修改不会改写已有视频。'} · ${shots.filter(s=>s.prompt?.trim()).length} 镜已有 H3 提示词</p>${groups.map(g=>`<details class="card story-scene" open><summary>场景 ${g.index} · ${esc(g.title)} <span class="muted">${g.shots.length} 镜</span></summary>${g.shots.map((s,i)=>`<details class="story-shot"><summary>镜头 ${i+1} · ${esc(s.camera||'景别待定')} · ${s.dur} 秒 · ${s.prompt?.trim()?'H3 已填写':'H3 待生成'}</summary><div class="formgrid">${[['scene','场景名称'],['camera','景别与运镜'],['script','人物行动'],['visual','画面设计'],['dialogue','对白 / 声音'],['prompt','H3 提示词']].map(([field,label])=>`<label>${label}<textarea aria-label="场景${g.index}镜头${i+1}${label}" data-id="${esc(s.id)}" oninput="storyFlowEditShot(this.dataset.id,'${field}',this.value)">${esc(s[field]||'')}</textarea></label>`).join('')}</div><label>时长（秒）<input type="number" min="4" max="15" step="1" value="${s.dur}" data-id="${esc(s.id)}" onchange="storyFlowEditShot(this.dataset.id,'dur',this.value)"></label><p class="muted">对白保持原文依据；生成前会核对说话人、时长和素材。改写画面后，请按需重写本镜 H3。</p><button class="btn" data-id="${esc(s.id)}" onclick="storyFlowPromptOne(this.dataset.id)" ${storyFlowRuns.has(p.id)?'disabled':''}>${s.prompt?.trim()?'重写本镜 H3':'生成本镜 H3'}</button><details><summary>剧本原文依据</summary><p>${esc(s.sourceExcerpt||'')}</p></details></details>`).join('')}</details>`).join('')}</section>`;
 }
 const storyFlowRender=renderScripts;
