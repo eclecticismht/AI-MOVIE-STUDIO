@@ -23,3 +23,8 @@ test('saved first-frame URLs use editor validation in production preflight; uplo
  vm.runInContext(fs.readFileSync('asset-reference-ui.js','utf8'),context);context.shot=s;assert.equal(vm.runInContext('shotDialogueEvents(shot)[0].speakerId',context),'waitress');
  delete s.firstFrameSpeakerPosition;assert.throws(()=>vm.runInContext('shotDialogueEvents(shot)',context),/说话人/);
 });
+
+test('same role and voice version still reject a recording registered with different words',()=>{assert.throws(()=>C.assertSelection({...data,audio:[{...asset,transcript:'没有过不去的坎。'}]},shot,file,events),/台词/)});
+test('a registered full take may contain the exact current excerpt without rewriting either',()=>{const full={...asset,transcript:'不如意事常八九，可与人言无二三，都在酒里了。'},source={...data,audio:[full]},before=JSON.stringify(source);assert.equal(C.inspect(source,shot,file,events).status,'compatible');assert.equal(JSON.stringify(source),before);assert.equal(C.inspect({...data,audio:[{...asset,transcript:'都在酒里了！'}]},shot,file,events).status,'compatible')});
+test('missing old transcript does not invent an exact-word claim',()=>{assert.equal(C.inspect(data,shot,file,events).status,'compatible');assert.throws(()=>C.assertSelection({...data,audio:[{...asset,transcript:'都在茶里了。'}]},shot,file,events),/台词/)});
+test('server applies the registered transcript check as well as the current dialog key',()=>{assert.throws(()=>P.verifyCasting({projectId:'p',shotId:'s',file,dialogueEvents:events},{...data,audio:[{...asset,transcript:'祝你生日快乐。'}]}),/台词/)});
