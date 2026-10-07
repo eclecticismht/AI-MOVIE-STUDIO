@@ -5,7 +5,8 @@ function shotDialogueEvents(shot){
   const characters=(D.characters||[]).filter(c=>c.projectId===shot.projectId);
   const events=DialogueContract.parseDialogue(shot.dialogue||'',characters);
   DialogueContract.checkSource(events,shot.sourceExcerpt);
-  const binding=typeof PerformanceAudio==='undefined'?undefined:PerformanceAudio.validate(shot.performanceAudio,{...shot,dialogueEvents:events});
+  const binding=typeof PerformanceAudio==='undefined'?undefined:PerformanceAudio.validateForEditor(shot.performanceAudio,{...shot,dialogueEvents:events});
+  if(typeof VoiceCasting!=='undefined')VoiceCasting.checkBound(D,shot,events);
   DialogueContract.bindDialogue('visual only',events,Number(shot.dur),[],undefined,!!binding);
   return events;
 }

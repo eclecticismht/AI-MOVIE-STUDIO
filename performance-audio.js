@@ -59,6 +59,14 @@ async function upload(binding,shot,comfyUrl,fetchImpl=fetch){
  if(!verify.ok||digest(Buffer.from(await verify.arrayBuffer()))!==checked.sha256)throw Error('H3 配音上传后校验失败，未提交视频生成');
  return checked;
 }
+function verifyCasting(input,data){
+ if(input.projectId===undefined&&input.shotId===undefined)return;
+ if(typeof input.projectId!=='string'||typeof input.shotId!=='string')throw Error('配音绑定缺少项目或镜头编号');
+ const shot=data?.shots?.find(s=>s.id===input.shotId&&s.projectId===input.projectId&&!s.autoArchived);if(!shot)throw Error('配音来源镜头不存在');
+ const characters=(data.characters||[]).filter(c=>c.projectId===input.projectId),events=Dialogue.parseDialogue(shot.dialogue||'',characters);Dialogue.checkSource(events,shot.sourceExcerpt,characters);
+ if(Contract.speechKey(events)!==Contract.speechKey(input.dialogueEvents))throw Error('原镜对白已改变，未绑定旧配音');
+ return require('./voice-casting').assertSelection(data,shot,input.file,events);
+}
 async function api(req,res,pathname){
  if(pathname!=='/api/performance-audio')return false;
  const send=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(data))};
@@ -66,7 +74,7 @@ async function api(req,res,pathname){
   if(req.method==='GET'){let connected=false;try{const r=await fetch('http://127.0.0.1:8080/health',{signal:AbortSignal.timeout(3000)});connected=r.ok&&(await r.json()).performanceAudioVersion===2}catch{}send(200,{version:2,connectorReady:connected});return true}
   if(req.method!=='POST')throw Error('请使用配音参考编辑器');
   if(req.headers.origin&&req.headers.origin!==`http://${req.headers.host}`)throw Error('请从本地工作室保存配音');
-  const input=JSON.parse(await require('./request-body').readUtf8(req,30000,'配音绑定请求过大'));send(201,{binding:prepare(input)});
+  const input=JSON.parse(await require('./request-body').readUtf8(req,30000,'配音绑定请求过大'));if(input.projectId!==undefined||input.shotId!==undefined)verifyCasting(input,require('./workspace-api').createStore().read().data);send(201,{binding:prepare(input)});
  }catch(e){send(400,{error:e.message})}return true;
 }
-module.exports={prepare,validate,prompt,upload,api,pcm,wav};
+module.exports={prepare,validate,prompt,upload,api,pcm,wav,verifyCasting};
