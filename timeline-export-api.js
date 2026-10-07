@@ -55,8 +55,8 @@ function sourceLocation(value){
     if(imported&&!u.search)return {file:path.join(__dirname,'assets','imported',imported[1])};
     const preview=/^\/api\/film\/(film_[a-f0-9]+)\/preview$/.exec(u.pathname);
     if(preview&&/^\d{1,4}$/.test(u.searchParams.get('index')||''))return {file:path.join(__dirname,'film-runs',preview[1],'clip-'+u.searchParams.get('index')+'.mp4')};
-    const movie=/^\/film-runs\/(film_[a-f0-9]+)\/(movie|clip-\d+)\.mp4$/.exec(u.pathname);
-    if(movie)return {file:path.join(__dirname,'film-runs',movie[1],movie[2]+'.mp4')};
+    const movie=/^\/film-runs\/(film_[a-f0-9]+)\/(movie|(?:clip|sound|framed)-\d+)\.mp4$/.exec(u.pathname);
+    if(movie&&!u.search)return {file:path.join(__dirname,'film-runs',movie[1],movie[2]+'.mp4')};
   }throw Error('只允许本机工作室或渲染器中的视频');
 }
 function validate(input){

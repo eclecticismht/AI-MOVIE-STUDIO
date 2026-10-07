@@ -5,7 +5,7 @@ function filmReference(value){
  if(url.origin!=='http://127.0.0.1:4173'||url.username||url.password||url.hash)return null;
  const preview=/^\/api\/film\/(film_[a-f0-9]+)\/preview$/.exec(url.pathname);
  if(preview&&/^\d{1,4}$/.test(url.searchParams.get('index')||''))return {runId:preview[1],index:Number(url.searchParams.get('index'))};
- const clip=/^\/film-runs\/(film_[a-f0-9]+)\/clip-(\d{1,4})\.mp4$/.exec(url.pathname);
+ const clip=/^\/film-runs\/(film_[a-f0-9]+)\/(?:clip|sound|framed)-(\d{1,4})\.mp4$/.exec(url.pathname);
  return clip&&!url.search?{runId:clip[1],index:Number(clip[2])}:null;
 }
 
