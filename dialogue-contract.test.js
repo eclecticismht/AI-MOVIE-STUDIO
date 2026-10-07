@@ -2,6 +2,22 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const {parseDialogue,checkSource,bindDialogue,repairEvents}=require('./dialogue-contract');
 const {makeAss,validatePlan}=require('./film-api');
 const chars=[{id:'a',name:'甲'},{id:'b',name:'乙'}];
+test('device announcements retain speech and never bind to a visible person',()=>{
+  const source='密码锁提示：密码错误',events=parseDialogue(source,chars);
+  assert.deepEqual(events,[{type:'speech',speakerId:'device:密码锁提示',speakerName:'密码锁提示',delivery:'offscreen',text:'密码错误'}]);
+  assert.doesNotThrow(()=>checkSource(events,source,chars));
+  assert.throws(()=>checkSource(parseDialogue('甲：密码错误',chars),source,chars),/人物与剧本不符/);
+  assert.throws(()=>checkSource(parseDialogue('旁白：密码错误',chars),source,chars),/人物与剧本不符/);
+  assert.throws(()=>checkSource(parseDialogue('环境音：密码错误',chars),source,chars),/不能归为环境音/);
+  const prompt=bindDialogue('visual',events,6,[{assetId:'a'}]);
+  assert.ok(prompt.includes('electronic voice heard ONLY from the scripted device speaker'));
+  assert.ok(prompt.includes('every visible person remains silent'));
+  assert.ok(!prompt.includes('<Subject 1>'));
+  const silent=parseDialogue('屏幕文字：密码错误',chars);
+  assert.equal(silent[0].type,'screen');
+  assert.ok(!bindDialogue('visual',silent,6).includes('<d>'));
+  assert.throws(()=>parseDialogue('陌生设备：密码错误',chars),/不在本项目/);
+});
 test('broadcast narration remains speech without a visible character asset',()=>{
   const source='画外音新闻：今天发布新的城市交通安排。';
   const events=parseDialogue(source,chars);

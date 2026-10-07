@@ -1,6 +1,7 @@
 (function(root){
   const clean=s=>String(s||'').replace(/\s+/g,'').replace(/[“”「」『』]/g,'');
   const isNarration=name=>/^(?:旁白|画外音|画外音新闻|新闻画外音|新闻播报|广播新闻)$/.test(name);
+  const isDevice=name=>/^(?:设备提示|密码锁提示|门锁提示|电子锁提示)$/.test(name);
   function parseDialogue(text,characters=[]){
     if(!String(text||'').trim())return [];
     let input=String(text).trim();
@@ -21,9 +22,9 @@
       else if(/[（(](画外|画外音)[）)]/.test(label))delivery='offscreen';
       const name=label.replace(/[（(](语音|电话|画外|画外音)[）)]/g,'').trim();
       const speaker=characters.find(c=>c.name===name);
-      if(!speaker&&!isNarration(name))throw Error('对白人物“'+name+'”不在本项目角色库，请选择正确人物。');
+      if(!speaker&&!isNarration(name)&&!isDevice(name))throw Error('对白人物“'+name+'”不在本项目角色库，请选择正确人物。');
       if(/[<>]/.test(text))throw Error('对白只能包含台词正文，不能包含模型标签。');
-      return {type:'speech',speakerId:speaker?.id||'narrator',speakerName:name,delivery:isNarration(name)?'offscreen':delivery,text};
+      return {type:'speech',speakerId:isDevice(name)?'device:'+name:speaker?.id||'narrator',speakerName:name,delivery:isNarration(name)||isDevice(name)?'offscreen':delivery,text};
     });
   }
   function checkCharacterBindings(shot,characters=[]){
@@ -52,6 +53,7 @@
   // AI fact summary. Longest aliases win; thoughts and written messages never do.
   function sourceSpeaker(label,characters=[]){
     const bare=String(label).replace(/[（(][^）)]*[）)]/g,'').split(/[。！？!?]\s*/).at(-1).trim();
+    if(isDevice(bare))return {id:'device:'+bare,name:bare};
     if(isNarration(bare)||bare==='画外声音')return {id:'narrator',name:bare};
     const names=characters.flatMap(c=>[c.name,...(c.aliases||[])].filter(Boolean).map(name=>({c,name}))).sort((a,b)=>b.name.length-a.name.length);
     for(const {c,name} of names){if(!bare.startsWith(name))continue;const suffix=bare.slice(name.length).trim();
@@ -66,7 +68,7 @@
     for(const e of events)if(e.type==='sound'){
       const spoken=String(source).split(/\n/).some(line=>{
         const m=/^\s*([^:：]{1,50})[:：]\s*(.+)$/.exec(line);
-        return m&&(isNarration(m[1].trim())||/[（(](?:画外|画外音|语音|电话)[）)]/.test(m[1]))&&clean(m[2]).includes(clean(e.text));
+        return m&&(isNarration(m[1].trim())||isDevice(m[1].trim())||/[（(](?:画外|画外音|语音|电话)[）)]/.test(m[1]))&&clean(m[2]).includes(clean(e.text));
       });
       if(spoken)throw Error('原文中的画外播报或语音不能归为环境音，请保留说话标签并按对白时长拆镜。');
     }
@@ -111,7 +113,7 @@
     if(!audioTiming&&units/4+0.8>duration)throw Error('台词过长，当前时长难以自然说完；请延长镜头或拆分台词。');
     const extra=speech.length?speech.map(e=>{
       const i=references.findIndex(r=>r.assetId===e.speakerId),subject=speakerPosition&&e.delivery==='onscreen'?`the person on the viewer’s ${speakerPosition} (${e.speakerName})`:i>=0?`<Subject ${i+1}> (${e.speakerName})`:e.speakerName;
-      return `${subject} (S1), ${e.delivery==='phone'?'heard ONLY through the phone loudspeaker, physically off-screen':e.delivery==='offscreen'?'off-screen voice only':'the sole visible speaking character'}, says exactly <d>[Chinese]${e.text}</d>. All other visible people keep their mouths closed. Do not change words, add speech, or move this voice to another character.`;
+      return `${subject} (S1), ${e.speakerId.startsWith('device:')?'electronic voice heard ONLY from the scripted device speaker; every visible person remains silent':e.delivery==='phone'?'heard ONLY through the phone loudspeaker, physically off-screen':e.delivery==='offscreen'?'off-screen voice only':'the sole visible speaking character'}, says exactly <d>[Chinese]${e.text}</d>. All other visible people keep their mouths closed. Do not change words, add speech, or move this voice to another character.`;
     }).join('\n'):'No spoken words, narration, singing or intelligible voices. Visible people do not speak or perform speech-like lip movements. Allow natural mouth movement required by the scripted actions, including eating, chewing, drinking and breathing.';
     const boundary=prompt.indexOf('overall_soundscape:');
     const instruction='\n\nSpoken performance (authoritative):\n'+extra+'\nOn-screen text messages are silent and must never be spoken. Do not draw dialogue subtitles, captions, speaker labels or karaoke text onto the video; dialogue is audio only. Any explicitly requested device-screen content stays inside that device.\n\n';
