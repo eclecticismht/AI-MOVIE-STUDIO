@@ -4,6 +4,10 @@
  function source(shot,data){
   const source=Object.fromEntries(Object.entries(shot).filter(([k])=>!omitted.has(k)));
   const assets={};for(const [kind,key] of [['characters','characterIds'],['scenes','sceneIds'],['props','propIds']])assets[kind]=(shot[key]||[]).map(id=>(data[kind]||[]).find(a=>a.id===id&&a.projectId===shot.projectId)||{id,missing:true});
+  // A character's catalogue/default voice applies to future casting selection.
+  // Do not invalidate established pictures when adding that default. Per-shot
+  // voiceProfileId and the actual performanceAudio binding remain fingerprinted.
+  assets.characters=assets.characters.map(a=>Object.fromEntries(Object.entries(a).filter(([k])=>k!=='voiceProfile'&&k!=='voiceProfileId')));
   return canonical({source,assets});
  }
  async function fingerprint(shot,data){
