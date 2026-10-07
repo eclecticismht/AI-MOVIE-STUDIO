@@ -10,7 +10,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(ROOT, '.runtime', 'asr'))
 from faster_whisper import WhisperModel
 from opencc import OpenCC
-from pypinyin import lazy_pinyin, Style
+from pypinyin import lazy_pinyin, pinyin, Style
 converter = OpenCC('t2s')
 
 model_name = sys.argv[3] if len(sys.argv) > 3 else 'small'
@@ -43,8 +43,14 @@ if expected and normalized(''.join(s['text'] for s in result['segments'])) != no
         result['recheckError']=str(error)
 def phones(text):
     return lazy_pinyin(normalized(text), style=Style.TONE3, neutral_tone_with_five=True)
+def phone_options(text):
+    return pinyin(normalized(text),heteronym=True,style=Style.TONE3,neutral_tone_with_five=True)
 result['expectedPhonemes']=phones(expected)
+result['phonemeOptions']=phone_options(''.join(s['text'] for s in result['segments']))
+result['phonemeOptionsSource']='pypinyin-dictionary'
 result['phonemes']=phones(''.join(s['text'] for s in result['segments']))
 for alternative in result.get('alternatives', []):
     alternative['phonemes']=phones(''.join(s['text'] for s in alternative['segments']))
+    alternative['phonemeOptions']=phone_options(''.join(s['text'] for s in alternative['segments']))
+    alternative['phonemeOptionsSource']='pypinyin-dictionary'
 sys.stdout.buffer.write(json.dumps(result, ensure_ascii=False).encode('utf-8'))

@@ -16,25 +16,25 @@ function comparisonText(value){
  }));
 }
 function distance(a,b){let row=Array.from({length:b.length+1},(_,i)=>i);for(let i=0;i<a.length;i++){const next=[i+1];for(let j=0;j<b.length;j++)next.push(Math.min(next[j]+1,row[j+1]+1,row[j]+(a[i]===b[j]?0:1)));row=next}return row[b.length]}
-function phoneticMatch(expected,actual){
+function phoneticMatch(expected,actual,options,optionsSource){
  // ASR may assign a lexical tone to an unstressed particle (了 -> 乐).
  // Keep every consonant/vowel and every non-neutral tone strict; never permit omissions.
- return Array.isArray(expected)&&expected.length>0&&Array.isArray(actual)&&expected.length===actual.length&&expected.every((p,i)=>p===actual[i]||(/^(le|de|ma|ne|ba|a|zhe)5$/.test(p)&&p.slice(0,-1)===String(actual[i]).replace(/[1-5]$/,'')));
+ return Array.isArray(expected)&&expected.length>0&&Array.isArray(actual)&&expected.length===actual.length&&expected.every((p,i)=>p===actual[i]||(optionsSource==='pypinyin-dictionary'&&Array.isArray(options)&&options.length===actual.length&&Array.isArray(options[i])&&options[i].includes(p))||(/^(le|de|ma|ne|ba|a|zhe)5$/.test(p)&&p.slice(0,-1)===String(actual[i]).replace(/[1-5]$/,'')));
 }
 function selectTranscription(result){
- const candidates=[{method:result.method||'vad',segments:result.segments,phonemes:result.phonemes},...(result.alternatives||[])];
+ const candidates=[{method:result.method||'vad',segments:result.segments,phonemes:result.phonemes,phonemeOptions:result.phonemeOptions,phonemeOptionsSource:result.phonemeOptionsSource},...(result.alternatives||[])];
  const expected=comparisonText(result.normalizedExpected);
  if(!expected||candidates.length<2)return result;
  const score=c=>distance(expected,comparisonText(c.segments.map(s=>s.normalizedText??s.text).join('')));
  const selected=candidates.reduce((best,c)=>score(c)<score(best)?c:best);
- return {...result,method:selected.method,segments:selected.segments,phonemes:selected.phonemes,recognitionAttempts:candidates};
+ return {...result,method:selected.method,segments:selected.segments,phonemes:selected.phonemes,phonemeOptions:selected.phonemeOptions,phonemeOptionsSource:selected.phonemeOptionsSource,recognitionAttempts:candidates};
 }
 function compareSpeech(events,transcription){
   if(!Array.isArray(events))return {status:'unverifiable',reason:'旧任务没有结构化对白，不能自动判断原句和说话人物。',transcription};
   const spoken=events.filter(e=>e.type==='speech'),expected=spoken.map(e=>e.text).join(''),actual=transcription.segments.map(s=>s.text).join('');
   const a=comparisonText(transcription.normalizedExpected??expected),b=comparisonText(transcription.segments.map(s=>s.normalizedText??s.text).join('')),edits=distance(a,b);
-  const homophones=edits>0&&a.length>0&&phoneticMatch(transcription.expectedPhonemes,transcription.phonemes);
-  return {status:edits?(homophones?'pronunciation_match':'needs_review'):'text_match',expected,actual,edits,characterErrorRate:edits/Math.max(a.length,1),speakers:spoken.map(e=>({name:e.speakerName,delivery:e.delivery})),speakerIdentity:'not_verified',reason:homophones?'转写存在同音字或轻声助词歧义，转写音节可对应原句；这不是对实际声调的测量，人物和口型仍需观看确认。':edits?(a?'识别台词与剧本不同，请试听确认；识别本身也可能出错。':'此镜头应无对白，但识别到了声音文字，请试听确认。'):'文字识别一致；说话人物、口型和故事表达仍需观看确认。',transcription};
+  const homophones=edits>0&&a.length>0&&phoneticMatch(transcription.expectedPhonemes,transcription.phonemes,transcription.phonemeOptions,transcription.phonemeOptionsSource);
+  return {status:edits?(homophones?'pronunciation_match':'needs_review'):'text_match',expected,actual,edits,characterErrorRate:edits/Math.max(a.length,1),speakers:spoken.map(e=>({name:e.speakerName,delivery:e.delivery})),speakerIdentity:'not_verified',reason:homophones?'转写存在同音字、多音字合法读音候选或轻声助词歧义，可与原句逐音节对应；这不是对实际声调的测量，也不证明音色、说话人或口型正确，仍需审片。':edits?(a?'识别台词与剧本不同，请试听确认；识别本身也可能出错。':'此镜头应无对白，但识别到了声音文字，请试听确认。'):'文字识别一致；说话人物、口型和故事表达仍需观看确认。',transcription};
 }
 function transcribe(file,expected='',model='small'){return new Promise((resolve,reject)=>{
   if(!['small','medium','large-v3','sensevoice'].includes(model))return reject(Error('本地语音模型选项无效'));
