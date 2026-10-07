@@ -1,6 +1,7 @@
 const fs=require('fs'),path=require('path'),crypto=require('crypto');
 const {MODELS,validatePlan,buildGraph,executionSteps}=require('./local-first-frame');
 const {uploadReference}=require('./reference-assets');
+const AssetArchive=require('./generated-asset-archive');
 const COMFY='http://127.0.0.1:8188';
 function createFirstFrameApi({root=__dirname,fetchImpl=fetch,pollMs=2500}={}){
   const dir=path.join(root,'frame-runs'),assets=path.join(root,'assets','generated-frames');fs.mkdirSync(dir,{recursive:true});fs.mkdirSync(assets,{recursive:true});
@@ -27,6 +28,7 @@ function createFirstFrameApi({root=__dirname,fetchImpl=fetch,pollMs=2500}={}){
         const response=await fetchImpl(COMFY+'/view?'+new URLSearchParams(img),{signal:AbortSignal.timeout(45000)});if(!response.ok)throw Error('无法读取首帧结果');const bytes=Buffer.from(await response.arrayBuffer());
         if(!bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))throw Error('生成结果不是PNG图片');
         const filename=`${j.id}_${j.pass}.png`;fs.writeFileSync(path.join(assets,filename),bytes);j.outputs[j.pass]='/assets/generated-frames/'+filename;
+        try{const archived=await AssetArchive.archiveBuffer({root,projectId:j.plan.projectId,kind:'firstFrame',key:j.id+'_pass_'+(j.pass+1),filename,bytes,shotId:j.plan.shotId});if(archived){j.archiveOutputs||=[];j.archiveOutputs[j.pass]=archived}}catch(error){j.archiveWarnings=[...(j.archiveWarnings||[]),error.message]}
         if(j.pass+1<j.totalPasses)j.previous=(await uploadReference('data:image/png;base64,'+bytes.toString('base64'),COMFY,fetchImpl)).file;
         j.promptId=null;j.completedPasses=j.pass+1;j.pass++;save(j);
       }

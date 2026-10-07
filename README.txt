@@ -65,6 +65,15 @@ MASTER/4K, audio, Premiere hand-off, Local Connector, and 300/90 tracking.
 Project data is stored in this browser. Video jobs are sent to the configured local
 connector; screenplay generation sends the story and adaptation notes to DeepSeek.
 
+GENERATED ASSET ARCHIVE
+To keep generated assets reusable outside this workspace, create
+.runtime/generated-assets-archive.json with a projects object mapping a project ID
+to an absolute local folder. First-frame PNGs, completed H3 clips, and finished
+film exports are copied there without moving their working files. The archive keeps
+versioned filenames and a .index folder with checksums and shot/run references.
+GET /api/generated-assets?projectId=<id> lists the archived assets; each returned
+URL can preview or download its file. Projects without a mapping are not archived.
+
 SCREENPLAY WORKSPACE (DeepSeek)
 1. Restart START_LOCAL_SERVER.bat and open http://127.0.0.1:4173 in your usual browser.
 2. Open 剧本, paste the original story and optionally enter adaptation notes.

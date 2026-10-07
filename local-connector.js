@@ -8,11 +8,13 @@ const fs = require("fs");
 const path = require("path");
 const jobs = new Map();
 const submitting = new Set();
+const archiveTasks = new Set();
 const port = Number(process.env.CONNECTOR_PORT || 8080);
 const queueFile = path.join(__dirname, "connector-queue.json");
 const comfyUrl = process.env.COMFY_URL || "http://127.0.0.1:8188";
 const {updateProgress}=require('./h3-progress');
 const {validateReferences,referencePrompt,uploadReference}=require('./reference-assets');
+const AssetArchive=require('./generated-asset-archive');
 let liveSocket;
 function connectProgress() {
   if(typeof WebSocket==='undefined')return;
@@ -36,6 +38,11 @@ function renderDimensions(job) {
 
 try { JSON.parse(fs.readFileSync(queueFile, "utf8")).forEach(job => jobs.set(job.id, job)); } catch (error) { if (error.code !== "ENOENT") console.warn("Could not restore connector queue:", error.message); }
 function persistQueue() { fs.writeFileSync(queueFile+'.tmp', JSON.stringify([...jobs.values()], null, 2)); require('./replace-file').replaceFileSync(queueFile+'.tmp',queueFile,fs); }
+function archiveCompletedVideo(job){
+  if(!job.videoUrl||!job.output?.filename||job.archiveOutput||!AssetArchive.isEnabled(__dirname,job.projectId)||archiveTasks.has(job.id))return;
+  archiveTasks.add(job.id);job.archiveStatus='pending';
+  Promise.resolve().then(()=>AssetArchive.archiveUrl({root:__dirname,projectId:job.projectId,kind:'h3Video',key:job.id,filename:job.output.filename,url:job.videoUrl,fetchImpl:fetch,shotId:job.shot})).then(asset=>{if(asset){job.archiveOutput=asset;job.archiveStatus='archived'}else job.archiveStatus='skipped'}).catch(error=>{job.archiveStatus='failed';job.archiveError=error.message}).then(()=>{archiveTasks.delete(job.id);jobs.set(job.id,job);try{persistQueue()}catch(error){console.warn('Could not persist generated asset archive status:',error.message)}});
+}
 function attentionMode(value) {
   const mode=value??'pytorch';
   if(!['pytorch','sage'].includes(mode))throw Error('H3 注意力模式仅支持 pytorch 或 sage。');
@@ -102,6 +109,7 @@ const statusSyncs=new Map();
 function syncComfyStatus(job){if(statusSyncs.has(job.id))return statusSyncs.get(job.id);const task=readComfyStatus(job).finally(()=>statusSyncs.delete(job.id));statusSyncs.set(job.id,task);return task}
 async function readComfyStatus(job) {
   if(job.cancelledAt)return job;
+  if(job.archiveStatus==='pending'&&job.videoUrl)archiveCompletedVideo(job);
   const recovery=require('./connector-recovery');
   if(job.submissionPending&&!job.comfyPromptId){const result=await require('./connector-submission').reconcile(job,comfyRequest);if(result){recovery.found(job);job.connectorStatus='已找回 ComfyUI 任务'}else recovery.missing(job);persistQueue();}
   if(job.originalVideoUrl){require('./face-refine').processResult(job,{request:comfyRequest,persist:persistQueue,comfyUrl});return job;}
@@ -130,11 +138,12 @@ async function readComfyStatus(job) {
     job.connectorStatus="ComfyUI H3 已完成";job.output=output;
     job.completedAt=job.completedAt||new Date().toISOString();
     job.videoUrl=comfyUrl+"/view?filename="+encodeURIComponent(output.filename)+"&subfolder="+encodeURIComponent(output.subfolder||"")+"&type="+encodeURIComponent(output.type||"output");
+    archiveCompletedVideo(job);
     if(job.faceRefineMode&&job.faceRefineMode!=='off')require('./face-refine').processResult(job,{request:comfyRequest,persist:persistQueue,comfyUrl});
   } else if(record.status?.completed) job.connectorStatus="ComfyUI 已结束，未找到视频输出";
   jobs.set(job.id,job);persistQueue();return job;
 }
-const lifecycle=require('./service-lifecycle').createLifecycle({role:'connector',busy:()=>[...(submitting.size?['正在提交生成任务']:[]),...(statusSyncs.size?['正在同步生成结果或修复画面']:[])]});
+const lifecycle=require('./service-lifecycle').createLifecycle({role:'connector',busy:()=>[...(submitting.size?['正在提交生成任务']:[]),...(statusSyncs.size?['正在同步生成结果或修复画面']:[]),...(archiveTasks.size?['正在归档已完成素材']:[])]});
 // Continue opted-in post-processing even when the user leaves the queue page.
 if(typeof setInterval==='function'){
  let checkingFaces=false;

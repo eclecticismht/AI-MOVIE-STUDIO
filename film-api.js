@@ -11,6 +11,7 @@ const ScreenShot=require('./screen-shot');
 const {compareSpeech,transcribe}=require('./speech-audit');
 const DialogueContract=require('./dialogue-contract');
 const {validateReferences,uploadReference}=require('./reference-assets');
+const AssetArchive=require('./generated-asset-archive');
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {spawn}=require('node:child_process');
 const ROOT=path.join(__dirname,'film-runs');
@@ -177,6 +178,7 @@ async function work(run){
     const assPath=path.join(dir,'subtitles.ass').replace(/\\/g,'/').replace(/:/g,'\\:').replace(/'/g,"\\'");
     await command(['-y','-i',path.join(dir,'joined.mp4'),'-vf',`ass=filename='${assPath}'`,'-c:v','libx264','-preset','fast','-crf','20','-c:a','copy','-movflags','+faststart',path.join(dir,'movie.mp4')],path.join(dir,'export.log'));
     if(fs.statSync(path.join(dir,'movie.mp4')).size<1000)throw Error('成片文件无效。');
+    try{const archived=await AssetArchive.archiveFile({root:__dirname,projectId:run.projectId,kind:'master',key:run.id,filename:run.id+'.mp4',sourcePath:path.join(dir,'movie.mp4'),runId:run.id});if(archived)run.archivedMaster=archived}catch(error){run.archiveWarning=error.message}
     run.status='complete';run.completedAt=new Date().toISOString();run.current={stage:'MP4 已生成，待观看验收'};save(run);
   }catch(error){run.status='failed';run.error=error.message;save(run)}finally{busy.delete(run.id)}
 }

@@ -11,11 +11,12 @@ test('reference videos reach H3 as frame batches with distinct image and video l
  assert.equal(graph['40'].class_type,'LoadVideo');assert.equal(graph['41'].class_type,'GetVideoComponents');assert.deepEqual(graph['8'].inputs['ref_videos.ref_video_0'],['41',0]);assert.deepEqual(graph['8'].inputs['ref_images.ref_image_0'],['20',0]);assert.match(graph['5'].inputs.global_prompt,/<Video 1>/);assert.match(graph['5'].inputs.global_prompt,/<Picture 1>/);assert.equal(graph['8'].inputs['ref_video_audios.ref_video_audio_0'],undefined);
 });
 
-function harness(fetchImpl,seed=[],policyCheck=()=>{},performanceAudio) {
+function harness(fetchImpl,seed=[],policyCheck=()=>{},performanceAudio,archiveApi) {
   let handler, saved=JSON.stringify(seed);
   const context=vm.createContext({
     require(name) {
       if(name==='./performance-audio'&&performanceAudio)return performanceAudio;
+      if(name==='./generated-asset-archive'&&archiveApi)return archiveApi;
       if(name==='./production-policy')return {assertGenerationAllowed:policyCheck};
       if(name==='http')return {createServer(fn){handler=fn;return {listen(){}}}};
       if(name==='fs')return {readFileSync(){return saved},writeFileSync(path,value){saved=value},renameSync(){}};
@@ -189,6 +190,15 @@ test('execution errors surface and completed images are not treated as videos',a
   record={status:{completed:true},outputs:{preview:{images:[{filename:'preview.png'}]}}};
   const result=(await request('GET','/jobs/test/status')).data.job;
   assert.match(result.connectorStatus,/未找到视频/);assert.equal(result.videoUrl,undefined);
+});
+
+test('completed H3 jobs archive generated video for mapped projects',async()=>{
+ let archivedOptions,finishArchive;const pendingArchive=new Promise(resolve=>finishArchive=resolve),archiveApi={isEnabled:()=>true,archiveUrl:async options=>{archivedOptions=options;return pendingArchive}};
+ const request=harness(async url=>reply(url.endsWith('/prompt')?{prompt_id:'p1'}:{p1:{status:{completed:true,status_str:'success'},outputs:{save:{videos:[{filename:'test.mp4',subfolder:'',type:'output'}]}}}}),[],()=>{},undefined,archiveApi);
+ await request('POST','/jobs',{...job,id:'archive-job',projectId:'XMQ120_20260928',shot:'shot-1'});await request('POST','/jobs/archive-job/comfy');const result=(await request('GET','/jobs/archive-job/status')).data.job;
+ assert.equal(result.archiveStatus,'pending');assert.equal(result.archiveOutput,undefined);assert.equal(archivedOptions.projectId,'XMQ120_20260928');assert.equal(archivedOptions.kind,'h3Video');assert.equal(archivedOptions.shotId,'shot-1');assert.match(archivedOptions.url,/\/view\?/);
+ finishArchive({assetId:'a'.repeat(24),relativePath:'H3镜头/test.mp4',url:'/api/generated-assets/XMQ120_20260928/'+ 'a'.repeat(24)});await new Promise(resolve=>setTimeout(resolve,0));
+ const saved=(await request('GET','/jobs')).data.jobs[0];assert.equal(saved.archiveStatus,'archived');assert.equal(saved.archiveOutput.assetId,'a'.repeat(24));
 });
 
 test('cancelled tasks cannot be sent and invalid payloads are rejected',async()=>{

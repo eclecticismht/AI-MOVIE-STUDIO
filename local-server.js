@@ -32,6 +32,7 @@ const server=http.createServer(lifecycle.wrap(async (request, response) => {
   if(await require('./prompt-video').promptVideoApi(request,response,requestPath))return;
   if(await require('./story-document-api').storyDocumentApi(request,response,requestPath))return;
   if(await require('./timeline-export-api').timelineExportApi(request,response,requestPath))return;
+  if(await require('./generated-asset-archive').api(root,request,response,requestPath))return;
   if(await require('./asset-media-api').assetMediaApi(request,response,requestPath))return;
   if(await require('./production-review-api').productionReviewApi(request,response,requestPath))return;
   if(await firstFrameApi(request,response,requestPath))return;
