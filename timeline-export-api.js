@@ -1,6 +1,7 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),{spawn}=require('node:child_process'),{Readable,Transform}=require('node:stream'),{pipeline}=require('node:stream/promises');
 const Edit=require('./timeline-edit'),{resolveAudioAsset}=require('./audio-assets');
 const Subtitles=require('./timeline-subtitles');
+const SoundDesign=require('./sound-design'),SoundRender=require('./sound-design-render');
 const ROOT=path.join(__dirname,'timeline-exports'),FFMPEG=process.env.FFMPEG_PATH||'C:\\AI\\Comfy UI\\ComfyUI\\.venv\\Lib\\site-packages\\imageio_ffmpeg\\binaries\\ffmpeg-win-x86_64-v7.1.exe';
 const OUTPUTS=Object.freeze({
   '854x480':Object.freeze({width:854,height:480,label:'480p 横屏',upscaled:false,sampleAspect:'1280/1281',displayAspect:'16:9'}),
@@ -66,9 +67,10 @@ function validate(input){
   const edit={order:sources.map(s=>s.id),clips:Object.fromEntries(sources.map(s=>[s.id,s]))},clips=Edit.build(sources,edit),mix=Edit.mix(input.mix);
   if(mix.musicFile)resolveAudioAsset(mix.musicFile);
   if(clips.at(-1).end>1800)throw Error('单次剪辑导出最长 30 分钟');
+  let soundDesign;if(input.soundDesign){soundDesign=SoundDesign.assertReady(input.soundDesign,require('./workspace-api').createStore().read().data||{},input.projectId);if(Math.abs(soundDesign.duration-clips.at(-1).end)>.04)throw Error('声音方案与画面时长不一致');if(soundDesign.timelineBinding&&soundDesign.timelineBinding!==SoundDesign.timelineSignature(clips))throw Error('声音方案对应的剪点已经变化，请重新核对');if(mix.musicFile)throw Error('五轨声音与旧背景音乐不能重复叠加，请迁移旧配乐后再导出');}
   const aspectMode=input.aspectMode||'pad';if(!['pad','crop'].includes(aspectMode))throw Error('画面适配方式无效');
   const colorMode=input.colorMode||'preserve';if(!['preserve','bt709'].includes(colorMode))throw Error('色彩转换方式无效');
-  return {projectId:input.projectId,title:String(input.title||'时间线剪辑版').slice(0,120),clips:clips.map(c=>({...c.shot,...c.edit,overlap:c.overlap,duration:c.duration})),mix,output:outputSettings(input.outputResolution),deliveryMode:deliveryMode(input.deliveryMode),aspectMode,colorMode};
+  return {projectId:input.projectId,title:String(input.title||'时间线剪辑版').slice(0,120),clips:clips.map(c=>({...c.shot,...c.edit,overlap:c.overlap,duration:c.duration})),mix,...(soundDesign?{soundDesign}:{}),output:outputSettings(input.outputResolution),deliveryMode:deliveryMode(input.deliveryMode),aspectMode,colorMode};
 }
 function command(args){return new Promise((resolve,reject)=>{const p=spawn(FFMPEG,args,{windowsHide:true,stdio:['ignore','ignore','pipe']});let log='';p.stderr.on('data',b=>log=(log+b).slice(-20000));p.on('error',reject);p.on('close',code=>code===0?resolve(log):reject(Object.assign(Error('合成失败：'+log.slice(-1200)),{log})))})}
 async function download(location,file){if(location.file){await fs.promises.copyFile(location.file,file);return}const r=await fetch(location.url,{redirect:'error',signal:AbortSignal.timeout(120000)});if(!r.ok)throw Error('视频无法读取：HTTP '+r.status);let size=0;await pipeline(Readable.fromWeb(r.body),new Transform({transform(chunk,encoding,cb){size+=chunk.length;cb(size>512*1024*1024?Error('单个素材超过512MB'):null,chunk)}}),fs.createWriteStream(file))}
@@ -112,7 +114,8 @@ async function work(run){
     run.message='合成转场与混音';save(run);
     const clips=run.plan.clips.map(c=>({duration:c.duration,overlap:c.overlap,edit:c})),graph=Edit.graph(clips),inputs=run.plan.clips.flatMap((_,i)=>['-i',path.join(dir,'clip-'+i+'.mkv')]);
     const filters=clips.flatMap((_,i)=>[`[${i}:v]settb=AVTB,setpts=PTS-STARTPTS,fps=24[v${i}]`,`[${i}:a]atrim=duration=${clips[i].duration},asetpts=PTS-STARTPTS[a${i}]`]).concat(graph.filters),mix=run.plan.mix;
-    if(mix.musicFile){inputs.push('-stream_loop','-1','-ss',String(mix.musicOffset),'-i',resolveAudioAsset(mix.musicFile));filters.push(`[${clips.length}:a]atrim=duration=${graph.duration},asetpts=PTS-STARTPTS,volume=${mix.musicVolume}[music]`,`[${graph.audio}][music]amix=inputs=2:duration=first:normalize=0,volume=${mix.master},alimiter=limit=0.95:level=false:latency=true[mixed]`)}
+    if(run.plan.soundDesign){const sound=await SoundRender.renderStems(run.plan.soundDesign,path.join(dir,'sound'),{onProgress:message=>{run.message=message;save(run)}});run.soundReport=sound;save(run);const index=clips.length;inputs.push('-i',sound.mixed);if(run.plan.soundDesign.baseMode==='replace'){filters.push(`[${graph.audio}]volume=0[mutedOriginal]`,`[mutedOriginal][${index}:a]amix=inputs=2:duration=longest:normalize=0,atrim=duration=${graph.duration},volume=${mix.master},alimiter=limit=0.95:level=false:latency=true[mixed]`);}else filters.push(`[${graph.audio}][${index}:a]amix=inputs=2:duration=first:normalize=0,volume=${mix.master},alimiter=limit=0.95:level=false:latency=true[mixed]`);}
+    else if(mix.musicFile){inputs.push('-stream_loop','-1','-ss',String(mix.musicOffset),'-i',resolveAudioAsset(mix.musicFile));filters.push(`[${clips.length}:a]atrim=duration=${graph.duration},asetpts=PTS-STARTPTS,volume=${mix.musicVolume}[music]`,`[${graph.audio}][music]amix=inputs=2:duration=first:normalize=0,volume=${mix.master},alimiter=limit=0.95:level=false:latency=true[mixed]`)}
     else filters.push(`[${graph.audio}]volume=${mix.master},alimiter=limit=0.95:level=false:latency=true[mixed]`);
     const captions=Subtitles.timelineAss(run.plan.clips,captionShots,{qhd:output.preset==='2560x1440'});let video='sized',audio='mixed';
     filters.push(`[${graph.video}]${outputScaleFilter(output,bundle?'yuv422p10le':'yuv420p')}[sized]`);

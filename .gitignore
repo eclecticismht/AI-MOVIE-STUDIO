@@ -28,3 +28,6 @@ __pycache__/
 node_modules/
 test-artifacts/
 assets/
+
+# Generated sound stems and audio renders (source stays in application files)
+sound-runs/

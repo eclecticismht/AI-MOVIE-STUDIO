@@ -17,7 +17,8 @@ const lifecycle=require('./service-lifecycle').createLifecycle({role:'web',busy:
  ...(require('./film-api').isBusy()?['成片生成或审片仍在进行']:[]),
  ...(firstFrameApi.isBusy()?['首帧生成仍在进行']:[]),
  ...(actFilmApi.isBusy()?['场次合成仍在进行']:[]),
- ...(require('./timeline-export-api').isBusy()?['剪辑导出仍在进行']:[])
+ ...(require('./timeline-export-api').isBusy()?['剪辑导出仍在进行']:[]),
+ ...(require('./sound-design-api').isBusy()?['声音分轨导出仍在进行']:[])
 ]});
 const controlApi=require('./studio-control').createControlApi(lifecycle);
 const server=http.createServer(lifecycle.wrap(async (request, response) => {
@@ -26,6 +27,7 @@ const server=http.createServer(lifecycle.wrap(async (request, response) => {
   const requestPath = new URL(request.url, `http://${request.headers.host}`).pathname;
   if(await controlApi(request,response,requestPath))return;
   if(await workspaceApi(request,response,requestPath))return;
+  if(await require('./sound-design-api').api(request,response,requestPath))return;
   if(await require('./studio-status-api').studioStatusApi(request,response,requestPath))return;
   if(await actFilmApi(request,response,requestPath))return;
   if(await aiSettingsApi(request,response,requestPath))return;

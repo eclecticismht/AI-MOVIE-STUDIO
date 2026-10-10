@@ -3,7 +3,7 @@
   'use strict';
   const M = globalThis.StudioWorkbenchModel;
   if (!M || typeof D === 'undefined') throw Error('新版工作台依赖未加载，请刷新页面。');
-  const VERSION = '0.4.0-alpha.3 · 导演预演 / 480p', PREFS = 'ams_workbench_view_v1';
+  const VERSION = '0.4.0-alpha.4 · 五轨声音', PREFS = 'ams_workbench_view_v1';
   let preferences = {};
   try { preferences = JSON.parse(localStorage.getItem(PREFS) || '{}'); } catch {}
   const state = { route: 'studio', bin: 'shots', query: '', versionBusy: false, assetDirty: false, previousFocus: null };
@@ -36,6 +36,7 @@
     const status = $('wb-global-status'); if (status) status.textContent = message;
   }
   function canLeave() {
+    if (globalThis.SoundStudioUI && !globalThis.SoundStudioUI.canLeave()) return false;
     if (globalThis.DirectorPrevisUI && !globalThis.DirectorPrevisUI.canLeave()) return false;
     if (state.versionBusy) { notice('正在核对视频版本，请完成后再切换。'); return false; }
     if (typeof tlCanLeave === 'function' && !tlCanLeave()) return false;
@@ -310,6 +311,7 @@
       const expected = ['shots', 'gen', 'review', 'audio', 'timeline', 'edit'].includes(id) ? 'timeline' : ['characters', 'scenes', 'propsdb', 'assets'].includes(id) ? 'assets' : id === 'stories' ? 'scripts' : id === 'studio' || id === 'wb-home' ? 'wb-home' : id;
       if (!$(expected)?.classList.contains('on')) state.route = previous;
       if (state.route === 'previs') globalThis.DirectorPrevisUI?.activate();
+      if (['soundassets','soundmix'].includes(state.route)) globalThis.SoundStudioUI?.activate(state.route);
       shellUpdate(); remember();
     } catch (e) { state.route = previous; shellUpdate(); notice('页面切换未完成：' + e.message); throw e; }
   };
