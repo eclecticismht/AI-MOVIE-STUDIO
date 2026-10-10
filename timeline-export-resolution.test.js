@@ -16,7 +16,7 @@ test('timeline exports support explicit HD, Full HD, and labeled 4K upscaling',(
   assert.deepEqual(hd.output,outputSettings('1280x720'));
   const uhd=validate({projectId:'p',outputResolution:'3840x2160',clips:[clip]});
   assert.deepEqual(uhd.output,{preset:'3840x2160',width:3840,height:2160,label:'4K UHD（上采样）',upscaled:true});
-  assert.deepEqual(outputResolutions(),['1280x720','1920x1080','2560x1440','3840x2160']);
+  assert.deepEqual(outputResolutions(),['854x480','1280x720','1920x1080','2560x1440','3840x2160']);
   assert.equal(outputScaleFilter(uhd.output),'scale=3840:2160:flags=lanczos,setsar=1,format=yuv420p');
   assert.throws(()=>validate({projectId:'p',outputResolution:'7680x4320',clips:[clip]}),/支持的成片分辨率/);
 });

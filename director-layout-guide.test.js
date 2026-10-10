@@ -1,0 +1,9 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict'),P=require('./director-previs-model'),G=require('./director-layout-guide');
+function plan(){const space=P.newSpace({id:'room',name:'舱室'});space.depth=5.5;space.fixtures=[{id:'table',kind:'table',label:'餐桌',x:2.1,y:2.5,w:1.3,h:1.9},{id:'screen',kind:'screen',label:'壁屏',x:2.1,y:.15,w:1.5,h:.15}];const p=P.newPlan({characterIds:[]},space,[]);p.camera.start={x:5.8,y:2.5,targetX:2.1,targetY:2.5};p.camera.end=P.clone(p.camera.start);p.camera.fov=74;return p;}
+test('layout guide matches previs screen sides instead of mirroring the room',()=>{const p=plan(),g=G.geometry(p);for(const y of [1.2,2.5,3.8]){const screen=P.projectPoint({x:2.1,y},p.camera.start,p.camera.fov).u,actual=g.project([2.1,y,1]).x/1024;assert.ok(Math.abs(screen-actual)<.01);}});
+test('table side view has its long edge across screen, with screen on right return wall',()=>{const g=G.geometry(plan());assert.ok(g.project([2.1,1.2,1]).x>g.project([2.1,3.8,1]).x);assert.ok(g.project([2.1,.15,1.5]).x>512);});
+test('SVG guide contains geometry but no dialogue, human likeness or text labels',()=>{const p=plan(),before=P.signature(p),svg=G.svg(p);assert.match(svg,/<polygon/);assert.doesNotMatch(svg,/<text|沈舟|http[^:]*:\/\/(?!www.w3.org)/);assert.equal(P.signature(p),before);});
+test('guide has fixed validated output dimensions and is explicitly not photorealistic',()=>{const g=G.geometry(plan());assert.equal(g.width,1024);assert.equal(g.height,576);assert.equal(g.notPhotorealistic,true);assert.throws(()=>G.geometry(plan(),{width:5000,height:9000}),/尺寸/);});
+test('invalid room cannot produce a silently fabricated layout',()=>{const p=plan();p.space.width=NaN;assert.throws(()=>G.svg(p),/空间/);});
+test('geometry export neither mutates saved room nor creates files',()=>{const p=plan(),before=P.signature(p);G.svg(p);assert.equal(P.signature(p),before);});

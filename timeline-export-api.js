@@ -3,6 +3,7 @@ const Edit=require('./timeline-edit'),{resolveAudioAsset}=require('./audio-asset
 const Subtitles=require('./timeline-subtitles');
 const ROOT=path.join(__dirname,'timeline-exports'),FFMPEG=process.env.FFMPEG_PATH||'C:\\AI\\Comfy UI\\ComfyUI\\.venv\\Lib\\site-packages\\imageio_ffmpeg\\binaries\\ffmpeg-win-x86_64-v7.1.exe';
 const OUTPUTS=Object.freeze({
+  '854x480':Object.freeze({width:854,height:480,label:'480p 横屏',upscaled:false,sampleAspect:'1280/1281',displayAspect:'16:9'}),
   '1280x720':Object.freeze({width:1280,height:720,label:'HD',upscaled:false}),
   '1920x1080':Object.freeze({width:1920,height:1080,label:'Full HD',upscaled:true}),
   '2560x1440':Object.freeze({width:2560,height:1440,label:'2K QHD（常规缩放）',upscaled:true}),
@@ -11,7 +12,7 @@ const OUTPUTS=Object.freeze({
 const running=new Set();
 function outputSettings(value){
   const preset=value||'1280x720',settings=OUTPUTS[preset];
-  if(!settings)throw Error('请选择支持的成片分辨率：1280x720、1920x1080、2560x1440 或 3840x2160');
+  if(!settings)throw Error('请选择支持的成片分辨率：854x480、1280x720、1920x1080、2560x1440 或 3840x2160');
   return {preset,...settings};
 }
 function outputResolutions(){return Object.keys(OUTPUTS)}
@@ -36,11 +37,11 @@ function assertExportSpace(plan,root=__dirname,io=fs){
   const stats=io.statfsSync(root),available=Number(stats.bavail)*Number(stats.bsize),required=requiredExportBytes(plan);
   if(available<required)throw Error(`导出空间不足：此次无损中间素材需预留约 ${Math.ceil(required/1024**3)} GB，当前可用 ${Math.floor(available/1024**3)} GB。请先备份并整理已完成导出，再重试。`);
 }
-function outputScaleFilter(value,pixelFormat='yuv420p'){const output=typeof value==='string'?outputSettings(value):value||outputSettings();return `scale=${output.width}:${output.height}:flags=lanczos,setsar=1,format=${pixelFormat}`}
+function outputScaleFilter(value,pixelFormat='yuv420p'){const output=typeof value==='string'?outputSettings(value):value||outputSettings();return `scale=${output.width}:${output.height}:flags=lanczos,setsar=${output.sampleAspect||1}${output.sampleAspect?':max=10000':''},format=${pixelFormat}`}
 function intermediateFilter(output,aspectMode='pad',colorMode='preserve'){
   const {width,height}=output;
   const fit=aspectMode==='crop'?`scale=${width}:${height}:force_original_aspect_ratio=increase:force_divisible_by=2:flags=lanczos,crop=${width}:${height}`:`scale=${width}:${height}:force_original_aspect_ratio=decrease:force_divisible_by=2:flags=lanczos,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`;
-  return `fps=24,${colorMode==='bt709'?'colorspace=all=bt709:range=tv:format=yuv420p10,':''}${fit},setsar=1,format=yuv420p10le`;
+  return `fps=24,${colorMode==='bt709'?'colorspace=all=bt709:range=tv:format=yuv420p10,':''}${fit},setsar=${output.sampleAspect||1}${output.sampleAspect?':max=10000':''},format=yuv420p10le`;
 }
 function sourceLocation(value){
   const u=new URL(value,'http://127.0.0.1:4173');
