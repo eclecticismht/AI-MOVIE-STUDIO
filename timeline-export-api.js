@@ -55,6 +55,10 @@ function sourceLocation(value){
   if(u.origin==='http://127.0.0.1:4173'){
     const imported=/^\/assets\/imported\/(asset-[a-f0-9]{64}\.(mp4|webm|mov))$/.exec(u.pathname);
     if(imported&&!u.search)return {file:path.join(__dirname,'assets','imported',imported[1])};
+    // HQ H3 clips are already inside this local studio; do not recompress them to the 5 MB asset-upload limit.
+    // Segment names are strictly whitelisted to avoid reading arbitrary workstation paths.
+    const delivery=/^\/deliveries\/([A-Za-z0-9_-]{1,80})\/clips\/([A-Za-z0-9][A-Za-z0-9._-]{0,180}\.(?:mp4|webm|mov))$/.exec(u.pathname);
+    if(delivery&&!u.search&&!delivery[2].includes('..'))return {file:path.join(__dirname,'deliveries',delivery[1],'clips',delivery[2])};
     const preview=/^\/api\/film\/(film_[a-f0-9]+)\/preview$/.exec(u.pathname);
     if(preview&&/^\d{1,4}$/.test(u.searchParams.get('index')||''))return {file:path.join(__dirname,'film-runs',preview[1],'clip-'+u.searchParams.get('index')+'.mp4')};
     const movie=/^\/film-runs\/(film_[a-f0-9]+)\/(movie|(?:clip|sound|framed)-\d+)\.mp4$/.exec(u.pathname);

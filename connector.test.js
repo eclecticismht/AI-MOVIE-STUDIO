@@ -263,3 +263,33 @@ test('invalid H3 attention mode is rejected before a queue record is created',as
  assert.equal((await request('POST','/jobs',{...job,id:'bad-attention',h3Attention:'unknown'})).status,400);
  assert.equal((await request('GET','/jobs')).data.jobs.length,0);
 });
+
+
+test('high-quality H3 sampling profile uses native 1344x768 and accepts only bounded steps',async()=>{
+ const request=harness(async()=>reply({}));
+ assert.equal((await request('POST','/jobs',{...job,width:1344,height:768,h3Steps:20})).status,202);
+ const graph=(await request('GET','/jobs/test/graph')).data.prompt;
+ assert.equal(graph['5'].inputs.width,1344);
+ assert.equal(graph['5'].inputs.height,768);
+ assert.equal(graph['5'].inputs.steps,20);
+ assert.deepEqual(JSON.parse(graph['5'].inputs.timeline_data).output,{mode:'fixed',width:1344,height:768});
+ assert.equal((await request('POST','/jobs',{...job,id:'steps25',width:1344,height:768,h3Steps:25})).status,202);
+ assert.equal((await request('GET','/jobs/steps25/graph')).data.prompt['5'].inputs.steps,25);
+ assert.equal((await request('POST','/jobs',{...job,id:'badstep',h3Steps:12})).status,400);
+ assert.equal((await request('POST','/jobs',{...job,id:'badfraction',h3Steps:20.5})).status,400);
+ assert.equal((await request('POST','/jobs',{...job,id:'badstring',h3Steps:'20'})).status,400);
+});
+test('20-step high-quality settings reach the locked source-audio H3 sampler',async()=>{
+ const Contract=require('./performance-audio-contract');
+ const events=[{type:'speech',speakerId:'g7',speakerName:'沈星',delivery:'onscreen',text:'为什么？'}];
+ const binding={version:1,file:'ams-audio-'+'d'.repeat(64)+'.wav',sha256:'d'.repeat(64),duration:4,frames:Contract.frames(4),speechKey:Contract.speechKey(events)};
+ const perf={...require('./performance-audio'),validate:Contract.validate};
+ const request=harness(async()=>reply({}),[],()=>{},perf);
+ const ff={file:'ams-ref-'+'c'.repeat(64)+'.png',speakerPosition:'right'};
+ assert.equal((await request('POST','/jobs',{...job,id:'hq-voice',duration:4,width:1344,height:768,h3Steps:20,firstFrame:ff,performanceAudio:binding,dialogueEvents:events})).status,202);
+ const g=(await request('GET','/jobs/hq-voice/graph')).data.prompt;
+ assert.equal(g['62'].inputs.steps,20);
+ assert.equal(g['61'].inputs.width,1344);
+ assert.equal(g['61'].inputs.height,768);
+ assert.equal(g['61'].inputs.audio_mode,'lock_source');
+});

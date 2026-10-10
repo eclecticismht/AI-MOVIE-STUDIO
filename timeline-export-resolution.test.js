@@ -58,3 +58,26 @@ test('lossless exports refuse insufficient disk space before creating a run',()=
  assert.throws(()=>assertExportSpace(plan,'.',{statfsSync:()=>({bavail:10*1024**3,bsize:1})}),/空间不足/);
  assert.doesNotThrow(()=>assertExportSpace(plan,'.',{statfsSync:()=>({bavail:budget,bsize:1})}));
 });
+
+
+test('local HQ deliverable H3 clips bypass 5MB import and reject off-root access',()=>{
+ const path=require('node:path'),{sourceLocation}=require('./timeline-export-api');
+ const good='/deliveries/G7_REMAKE_S02_HQ/clips/G7_R05_EP001_STD01_D01_HQ_v001.mp4';
+ const at=sourceLocation(good);
+ assert.equal(at.file,path.join(__dirname,'deliveries','G7_REMAKE_S02_HQ','clips','G7_R05_EP001_STD01_D01_HQ_v001.mp4'));
+ const full=sourceLocation('http://127.0.0.1:4173'+good);
+ assert.equal(full.file,at.file);
+ for(const url of ['/deliveries/G7_REMAKE_S02_HQ/clips/../evil.mp4','/deliveries/G7_REMAKE_S02_HQ/clips/%2e%2e%2fevil.mp4','/deliveries/G7_REMAKE_S02_HQ/clips/evil.mp4?x=1','/deliveries/G7_REMAKE_S02_HQ/clips/evil.txt','https://example.com'+good,'file:///C:/secret.mp4','/deliveries/G7_REMAKE_S02_HQ/clips/a..b.mp4']){
+   assert.throws(()=>sourceLocation(url),/只允许|素材地址无效/);
+ }
+});
+test('HQ native 1344x768 crops 6 pixels vertically to true 16:9 before 1080p scale',()=>{
+ const {intermediateFilter,outputSettings}=require('./timeline-export-api');
+ const native={width:1344,height:768},safe={width:native.width,height:native.width*9/16};
+ assert.deepEqual(safe,{width:1344,height:756});
+ assert.equal((native.height-safe.height)/2,6);
+ const f=intermediateFilter(outputSettings('1920x1080'),'crop');
+ assert.match(f,/force_original_aspect_ratio=increase/);
+ assert.match(f,/crop=1920:1080/);
+ assert.equal(outputSettings('1920x1080').upscaled,true);
+});
