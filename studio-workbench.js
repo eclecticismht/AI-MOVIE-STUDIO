@@ -3,7 +3,7 @@
   'use strict';
   const M = globalThis.StudioWorkbenchModel;
   if (!M || typeof D === 'undefined') throw Error('新版工作台依赖未加载，请刷新页面。');
-  const VERSION = '0.4.0-alpha.1 · 五阶段导航', PREFS = 'ams_workbench_view_v1';
+  const VERSION = '0.4.0-alpha.2 · 导演预演', PREFS = 'ams_workbench_view_v1';
   let preferences = {};
   try { preferences = JSON.parse(localStorage.getItem(PREFS) || '{}'); } catch {}
   const state = { route: 'studio', bin: 'shots', query: '', versionBusy: false, assetDirty: false, previousFocus: null };
@@ -36,6 +36,7 @@
     const status = $('wb-global-status'); if (status) status.textContent = message;
   }
   function canLeave() {
+    if (globalThis.DirectorPrevisUI && !globalThis.DirectorPrevisUI.canLeave()) return false;
     if (state.versionBusy) { notice('正在核对视频版本，请完成后再切换。'); return false; }
     if (typeof tlCanLeave === 'function' && !tlCanLeave()) return false;
     if (state.assetDirty) {
@@ -224,6 +225,10 @@
   }
   function decorateInspector() {
     const host = $('tl-inspector'), clip = tlCurrent(); if (!host || !clip) return;
+    if (globalThis.DirectorPrevisUI && !host.querySelector('[data-previs-open]')) {
+      const b = document.createElement('button'); b.className = 'btn'; b.dataset.previsOpen = ''; b.textContent = '导演预演 / 对照座次';
+      b.onclick = () => globalThis.DirectorPrevisUI.openForShot(clip.shot.id); host.prepend(b);
+    }
     const versions = host.querySelector('[aria-label="本镜视频版本"]');
     if (versions) versions.onchange = () => useVersion(versions.value);
     const cut = host.querySelector('.cut-properties');
@@ -304,6 +309,7 @@
       } else originalGo(id === 'studio' ? 'wb-home' : id);
       const expected = ['shots', 'gen', 'review', 'audio', 'timeline', 'edit'].includes(id) ? 'timeline' : ['characters', 'scenes', 'propsdb', 'assets'].includes(id) ? 'assets' : id === 'stories' ? 'scripts' : id === 'studio' || id === 'wb-home' ? 'wb-home' : id;
       if (!$(expected)?.classList.contains('on')) state.route = previous;
+      if (state.route === 'previs') globalThis.DirectorPrevisUI?.activate();
       shellUpdate(); remember();
     } catch (e) { state.route = previous; shellUpdate(); notice('页面切换未完成：' + e.message); throw e; }
   };

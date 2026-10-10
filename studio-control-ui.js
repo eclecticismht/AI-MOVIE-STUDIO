@@ -5,6 +5,8 @@
  function fieldInfo(el){
   if(!el||!['INPUT','TEXTAREA','SELECT'].includes(el.tagName)||['password','file','hidden','button','submit'].includes(el.type)||secret.test((el.id||'')+' '+(el.name||'')+' '+(el.getAttribute('aria-label')||''))||el.closest('#textAISettings'))return null;
   const page=el.closest('.page');if(!page)return null;
+   // Director previs owns its draft and persists it through the same workspace adapter.
+   if(page.id==='previs'&&globalThis.DirectorPrevisUI)return null;
   const fields=[...page.querySelectorAll('input,textarea,select')],attributes={};
   for(const attr of [...el.attributes])if(attr.name.startsWith('data-')&&!secret.test(attr.name))attributes[attr.name]=attr.value;
   return {projectId:D.activeProjectId,page:page.id,editingShotId:typeof editingShotId==='string'?editingShotId:null,id:el.id||'',label:el.getAttribute('aria-label')||'',name:el.name||'',tag:el.tagName,type:el.type||'',index:fields.indexOf(el),attributes};
@@ -30,6 +32,7 @@
    if([...document.querySelectorAll('input[type="password"]')].some(el=>el.value))throw Error('请先使用设置中的保存按钮保存正在填写的密钥');
    // Blur commits existing onchange handlers before writing the model.
    document.activeElement?.blur();
+    if(globalThis.DirectorPrevisUI)await globalThis.DirectorPrevisUI.saveUnsaved();
    if(draft.length)D.studioEditorDraft={savedAt:new Date().toISOString(),fields:draft};
    const page=document.querySelector('.page.on')?.id;
    if(typeof TL!=='undefined'&&TL.dirty){tlSaveAudio();if(TL.dirty)throw Error('声音设置尚未保存，请处理编辑区提示')}

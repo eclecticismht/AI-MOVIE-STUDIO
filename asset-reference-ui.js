@@ -81,6 +81,7 @@ function shotReferenceAssets(shot){
   return result;
 }
 function requireShotReferenceImages(shot){
+  if(shot.directorPlan){if(typeof DirectorPrevis==='undefined')throw Error('导演预演组件未加载，请刷新后再生成');DirectorPrevis.assertReady(shot.directorPlan,shot,D.projects.find(p=>p.id===shot.projectId),(D.characters||[]).filter(c=>c.projectId===shot.projectId),DialogueContract.parseDialogue(shot.dialogue||'',(D.characters||[]).filter(c=>c.projectId===shot.projectId)));}
   DialogueContract.checkCharacterBindings(shot,(D.characters||[]).filter(c=>c.projectId===shot.projectId));
   if(shot.renderMode==='screen'){
     if(shot.firstFrameUrl||shot.continueFromShotId||shotDialogueEvents(shot).some(e=>e.type==='speech'))throw Error('屏幕资产展示不能含口头对白、首帧或尾帧承接');
