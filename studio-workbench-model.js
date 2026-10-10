@@ -2,12 +2,19 @@
 (function (root) {
   'use strict';
   const stages = [
-    { id: 'write', title: '写剧本', note: '故事与资产', icon: 'pen', routes: [['stories', '故事'], ['scripts', '剧本'], ['characters', '角色'], ['scenes', '场景'], ['propsdb', '道具']] },
-    { id: 'produce', title: '做镜头', note: '生成与审片', icon: 'film', routes: [['shots', '分镜'], ['gen', 'AI 生成'], ['review', '审片室'], ['audio', '声音']] },
-    { id: 'finish', title: '剪成片', note: '剪辑与输出', icon: 'cut', routes: [['timeline', '剪辑台'], ['masters', '成片']] }
+    { id: 'write', title: '写剧本', note: '故事与对白', icon: 'pen', defaultRoute: 'scripts', hint: '对白先行，保留故事与剧本版本', routes: [['stories', '故事'], ['scripts', '剧本']] },
+    { id: 'assets', title: '做资产', note: '人物与世界', icon: 'grid', defaultRoute: 'assets', hint: '管理可复用资产；不在此固定每场人物座次', routes: [['assets', '资产总览'], ['characters', '角色'], ['scenes', '场景'], ['propsdb', '道具']] },
+    { id: 'storyboard', title: '做分镜', note: '设计怎样拍', icon: 'grid', defaultRoute: 'shots', hint: '先设计画面与动作，再进入镜头生成', routes: [['shots', '分镜设计']] },
+    { id: 'produce', title: '做镜头', note: '生成与审片', icon: 'film', defaultRoute: 'gen', hint: '按分镜生成、绑定声音并比较候选', routes: [['gen', 'AI 生成'], ['review', '审片室'], ['audio', '镜头声音']] },
+    { id: 'finish', title: '剪成片', note: '剪辑与输出', icon: 'cut', defaultRoute: 'timeline', hint: '先剪节奏，再检查与输出', routes: [['timeline', '剪辑台'], ['masters', '成片']] }
   ];
+  // All routes remain existing editors. A future previs view is not advertised before it works.
+  function entryRoute(stageId) {
+    const stage = stages.find(s => s.id === stageId);
+    return stage?.defaultRoute || stage?.routes[0]?.[0] || null;
+  }
   function stageFor(route) {
-    if (route === 'assets') return 'write';
+    if (route === 'assets') return 'assets';
     if (route === 'edit') return 'finish';
     return stages.find(s => s.routes.some(r => r[0] === route))?.id || null;
   }
@@ -55,6 +62,6 @@
     const frames = Math.max(0, Math.round((Number(seconds) || 0) * fps));
     return [Math.floor(frames / (fps * 60)), Math.floor(frames / fps) % 60, frames % fps].map(n => String(n).padStart(2, '0')).join(':');
   }
-  const api = { stages, stageFor, summary, nextRoute, versionPatch, newProject, timecode };
+  const api = { stages, stageFor, entryRoute, summary, nextRoute, versionPatch, newProject, timecode };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.StudioWorkbenchModel = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

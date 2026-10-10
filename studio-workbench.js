@@ -3,7 +3,7 @@
   'use strict';
   const M = globalThis.StudioWorkbenchModel;
   if (!M || typeof D === 'undefined') throw Error('新版工作台依赖未加载，请刷新页面。');
-  const VERSION = '0.3.1 · 20261004', PREFS = 'ams_workbench_view_v1';
+  const VERSION = '0.4.0-alpha.1 · 五阶段导航', PREFS = 'ams_workbench_view_v1';
   let preferences = {};
   try { preferences = JSON.parse(localStorage.getItem(PREFS) || '{}'); } catch {}
   const state = { route: 'studio', bin: 'shots', query: '', versionBusy: false, assetDirty: false, previousFocus: null };
@@ -73,8 +73,8 @@
     shell.addEventListener('click', event => {
       const target = event.target.closest('[data-wb-route]'); if (target) go(target.dataset.wbRoute);
       const stage = event.target.closest('[data-wb-stage]'); if (stage) {
-        const section = M.stages.find(s => s.id === stage.dataset.wbStage);
-        go(section.id === 'write' ? 'scripts' : section.routes[0][0]);
+        const targetRoute = M.entryRoute(stage.dataset.wbStage);
+        if (targetRoute) go(targetRoute);
       }
     });
     $('wb-project-select').onchange = event => openProject(event.target.value, state.route);
@@ -98,7 +98,7 @@
     if (current) {
       const key = stage + '|' + state.route;
       if ($('wb-subnav').dataset.key !== key) {
-        $('wb-subnav').innerHTML = current.routes.map(([route, title]) => `<button class="btn wb-btn wb-quiet" data-wb-route="${route}" ${state.route === route ? 'aria-current="page"' : ''}>${title}</button>`).join('') + `<span class="wb-subnote">${stage === 'finish' ? '先剪节奏，再检查与输出' : stage === 'produce' ? '围绕当前镜头制作，不必来回找素材' : '对白先行，保留故事与剧本版本'}</span>`;
+        $('wb-subnav').innerHTML = current.routes.map(([route, title]) => `<button class="btn wb-btn wb-quiet" data-wb-route="${route}" ${state.route === route ? 'aria-current="page"' : ''}>${title}</button>`).join('') + `<span class="wb-subnote">${h(current.hint || current.note)}</span>`;
         $('wb-subnav').dataset.key = key;
       }
     }
